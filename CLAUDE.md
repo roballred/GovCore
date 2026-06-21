@@ -1,104 +1,54 @@
-# GovEA — Project Instructions for Claude
+# GovCore — Project Instructions for Claude
 
-> **Start here for any new AI session:** [`docs/AI-SESSION-START.md`](./docs/AI-SESSION-START.md) is the canonical session-bootstrap doc. It points at every other source of truth (Standards.md, this file, STYLE.md, README.md, product-priorities.md, the risk register, the validation plan) and captures the operating policies that drift &mdash; database workflow, GitHub CLI gotchas, deploy / mutating-`az` rules, and the public-repo policy on operator-specific deployment topology.
->
-> **Governing document:** [Standards.md](./Standards.md) defines the principles, workflow, and traceability requirements for all AI-assisted work on this project. This file extends those standards with Claude-specific context. If anything here conflicts with Standards.md, Standards.md governs.
+> **Governing plan:** [`docs/design/platform-core-extraction.md`](./docs/design/platform-core-extraction.md) is the source of truth for GovCore — architecture, locked decisions, package layout, the phased extraction plan, and security hardening. Read it before doing anything. If anything here conflicts with it, the design doc governs.
 
 ## What This Is
 
-GovEA is a free, open source enterprise architecture tool built specifically for state and local government.
+GovCore is a reusable, opinionated **multi-tenant platform core** for Next.js apps, published as versioned `@govcore/*` packages: identity, organizations, memberships + active-org resolution, RBAC, audit, federation, support-access (break-glass / act-as), middleware, theming, and (second milestone) a content engine. It owns *tenants, identity, and trust* — not any app's domain.
 
-Built on the [EasyEA](https://github.com/roballred/EasyEA) methodology — people-centered, lightweight, designed for everyday work rather than compliance theater.
+It is a **standalone initiative**, separate from [GovEA](https://github.com/roballred/GovEA). GovEA is the app this platform plane is being extracted from and is GovCore's first consumer; it depends on GovCore as a normal versioned dependency. **Do not modify GovEA from this repo.**
 
+- **Repo:** https://github.com/roballred/GovCore
+- **Local:** `/Users/robbot/Repos/Claude/GovCore` (peer to `govea-app`)
 
----
+## Current State — read this before editing
 
+This repo was **seeded from a full copy of GovEA `main`** (commit `19b4bdf`) as the extraction baseline. So right now it *is* the GovEA codebase. The work is to carve the reusable platform plane out into `@govcore/*` packages and remove the GovEA-specific domain, per the design doc's phased plan.
 
-## EasyEA Reference
+That means much of what's here is **GovEA legacy inherited from the seed, not GovCore canon yet** — including `Standards.md`, `docs/AI-SESSION-START.md`, `business-architecture/`, `apps/govea/`, and the EasyEA capability/persona model. Treat those as material to extract-from or delete, not as governing GovCore policy. The design doc is the policy.
 
-The methodology behind GovEA lives at https://github.com/roballred/EasyEA. Key concepts:
-- People-centered: start with personas, not systems
-- 7-step lightweight workflow
-- ARB review with 10 distinct reviewer personas (simulated in v2)
-- Plain-language outputs for elected officials and non-technical stakeholders
+## Locked Decisions (summary — full detail in the design doc)
 
----
-
-
-
-
-## User Roles
-
-| Role | Access |
-|---|---|
-| Admin | Full access — users, org settings, all content |
-| Contributor | Create and edit EA content — no user management, no delete |
-| Viewer | Read-only, published content only |
-
-SSO users default to Viewer. Admins promote as needed.
-
----
+- **Separate repo, opinionated stack:** Next.js App Router + Drizzle + PostgreSQL + Auth.js. Other stacks are out of scope.
+- **Core owns the platform tables and their migrations.** Migration-based **from day one** (`govcore-migrate`) — *not* `db:push`.
+- **Tenant isolation is database-enforced:** Postgres Row-Level Security + a transaction-local org GUC, plus a two-role DB (owner/DDL vs. non-owner runtime). All tenant DB access runs inside a tenant transaction.
+- **Generic RBAC:** `createRbac` parameterized over an app-supplied role/permission map (GovEA's `admin/contributor/viewer` map is the default).
+- **WCAG-AA base theme** as the accessibility floor; apps add brand themes on top.
+- **Whole-tenant backup/restore to file** (JSON for now).
+- **Content engine** (`@govcore/content`) is the second milestone, built after the platform-plane v1.
 
 ## Database Workflow
 
-**Pre-production (current):** Use `db:push` to sync schema changes directly to the dev database. CI also uses `db:push --force` on a fresh database (see `.github/workflows/ci.yml` — both DB-backed jobs run `db:push --force` then `db:apply-triggers:container`, **not** `db:migrate`). No migration files needed — run `pnpm --filter govea db:push` after schema edits, then `db:apply-triggers` to install Postgres triggers and other DB-level constraints, then `db:seed` to repopulate.
+The platform layer is **migration-based from day one** — author migrations in `@govcore/schema` and apply them with `govcore-migrate`. Do **not** reintroduce GovEA's pre-production `db:push --force` flow for platform tables.
 
-**There is no committed migrations directory, and that is intentional.** `db:push` derives the schema directly from `src/db/schema/`, so `apps/govea/src/db/migrations/` is not used by CI or local dev. (A set of 29 vestigial `drizzle-kit generate` files accumulated here against this policy and was removed in #683.) The `db:generate` / `db:migrate` scripts remain in `package.json` only for the eventual switch below — do not run them or commit their output during pre-production. If you find a `migrations/` directory has reappeared, it is drift: delete it rather than wiring CI to it.
+DB-level constraints that Drizzle doesn't manage (e.g. the append-only `audit_log` trigger) ship as raw-SQL migration steps, not a separate apply-triggers pass.
 
-**Switch to migrations when:** the first real tenant or persistent data exists that can't be thrown away. At that point: generate `0000_initial_schema.sql` from the current schema, fold the SQL files in `apps/govea/src/db/sql/` into the migration sequence, switch CI from `db:push --force` to `db:migrate`, and use `db:generate` + `db:migrate` for all schema changes going forward. Update this section (and remove this paragraph) when the switch happens.
+**No local Postgres on the maintainer machine** — database-backed tests run in CI. Lean on CI for migration builds, RLS cross-org-denial tests, and integration tests.
 
-### Postgres triggers (DB-level constraints)
+## Git & Commits
 
-Some constraints are enforced by Postgres triggers that drizzle-kit does not manage. Source of truth: `apps/govea/src/db/sql/*.sql`. Idempotent — re-applied after every `db:push` by `pnpm --filter govea db:apply-triggers`.
+- Commit identity is set repo-locally to **Rob Allred `<roballred@hotmail.com>`** (already configured; do not let commits land as RobBot).
+- Humans merge PRs. Don't push directly to `main`, don't force-push `main`, don't bypass hooks (`--no-verify`).
+- Don't commit secrets or `.env.local`.
 
-Currently shipped:
-- `audit-immutable.sql` — blocks UPDATE and DELETE on `audit_log` (#417). Audit rows are append-only at the DB layer; even a compromised admin role cannot rewrite history. Operators: this means the `audit_log` table cannot be retroactively edited, including by you.
+## What NOT to carry over from GovEA
 
-When adding a new trigger, drop a new `.sql` file in `src/db/sql/` (idempotent: `CREATE OR REPLACE` for functions, `DROP TRIGGER IF EXISTS` then `CREATE TRIGGER`). The apply-triggers script picks it up automatically.
+These were GovEA's *product* process and operator topology — they are **not** GovCore's:
 
----
+- Azure / `scripts/azure-dev.sh` deployment rules and any operator-specific identifiers.
+- The EasyEA issue → capability → persona → acceptance-criteria pre-flight, and GovEA milestones/ARB. GovCore will define its own (lightweight) traceability once it needs one; until then, the design doc + this file are the working agreement.
+- GovEA's `db:push` pre-production database workflow (see above).
 
-## GitHub
+## Working Approach
 
-Repo: https://github.com/roballred/GovEA
-
----
-
-## Pre-Flight Checklist — Required Before Writing Any Code
-
-Before implementing anything, work through every item below in order. If any item cannot be satisfied, stop and resolve it before proceeding. Do not start implementation to "figure it out as you go."
-
-### 1. Issue exists
-A GitHub issue must exist with defined scope and acceptance criteria. If the user hands me a task informally (chat message, verbal request), I must **create the issue first** and confirm its content before writing code. No exceptions.
-
-### 2. Capability traceability is present
-The issue must include a `Capability:` or `Capability group:` line referencing the relevant EasyEA capability ID (the file stem of the capability doc, e.g. `ac-feature-management`). If it is missing:
-- Read the relevant capability doc under `business-architecture/capabilities/` to identify the right ID.
-- Add it to the issue, or ask the user to confirm the mapping before proceeding.
-- If no capability doc exists for the work, flag that explicitly — do not silently proceed without traceability.
-
-### 3. Persona is identified
-The issue should name the persona(s) the work serves. If a change cannot be tied to a persona need or business goal, flag it and ask the user to confirm why it should exist. Do not assume the work is self-evidently justified.
-
-### 4. Acceptance criteria are clear
-The issue should have enough detail to know when the work is done. If acceptance criteria are missing or vague, ask before implementing.
-
----
-
-## Traceability in Every Commit and PR
-
-Every commit that touches implementation must include the capability ID in the message body:
-
-```
-feat(settings): add group-level module toggles
-
-Capability: ac-feature-management
-Closes #N
-```
-
-Every PR description must include:
-- `Closes #N` referencing the issue
-- `Capability: [id]` referencing the capability
-- A short explanation of what changed, why, and how it was tested
-
-This is not optional — it is the mechanism that makes AI-assisted work auditable and trustworthy.
+Strangler-from-the-copy: extract the platform plane into `@govcore/*` packages incrementally, keeping the repo building at each step, following the phase order in the design doc (§9 / §12). Prove the content engine on one rich entity before generalizing (Appendix B). Until the GovCore repository's own backlog exists, **the design doc is the single planning record** — work breakdown lives there.

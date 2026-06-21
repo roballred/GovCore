@@ -1,158 +1,64 @@
-# GovEA
+# GovCore
 
-**Open source enterprise architecture for state and local government.**
+**A reusable, opinionated multi-tenant platform core for Next.js apps.**
 
-GovEA helps government teams understand what they have, why it matters, and how technology connects to public outcomes. It is built around people, capabilities, applications, services, decisions, and strategy rather than compliance theater.
+GovCore packages the hardened "platform plane" that every serious multi-tenant SaaS re-implements badly — identity, organizations, memberships and active-organization resolution, role-based access control, audit, federation, and support-access (break-glass / act-as) sessions — into versioned `@govcore/*` packages, so a new app can stand up a secure multi-tenant foundation in well under a day and spend its time on its own domain instead.
 
-GovEA is free and open source. It can run locally, in containers, on-prem, or as a hosted deployment.
+A comprehensive **content engine** (define a content type as data, get storage/validation/lifecycle/UI) is planned as GovCore's second milestone.
 
-## What It Does
+## Status
 
-GovEA gives state and local government teams a practical EA workspace for:
+**Early / in active extraction.** This repository was seeded from the [GovEA](https://github.com/roballred/GovEA) codebase — GovEA is the production app this platform plane is being extracted *from*, and is GovCore's first consumer. The repo currently contains that full GovEA baseline; the work in progress is carving the reusable platform code out into `@govcore/*` packages and removing the GovEA-specific domain.
 
-- mapping personas, services, capabilities, applications, goals, objectives, and initiatives
-- tracing mission needs to the systems that support them
-- managing architecture decisions, principles, glossary terms, and architecture debt
-- building stakeholder-friendly reports and roadmap views
-- keeping taxonomy, audit, roles, and organization boundaries clear
-- importing and exporting portfolio data as the product matures
+**The plan is the source of truth:** [`docs/design/platform-core-extraction.md`](./docs/design/platform-core-extraction.md). Read it before doing anything here — it holds the architecture, the locked decisions, the package layout, the phased extraction plan, and the security hardening (RLS + two-role DB, generic RBAC, WCAG base theme, backup/restore, content engine).
 
-The core traceability chain is:
+## What it is (and isn't)
 
-```text
-Goals -> Strategic Objectives -> Initiatives -> Capabilities -> Applications
-```
+GovCore owns **tenants, identity, and trust** — "who can do what, in which org, and how do we prove it." It does **not** own any particular app's domain. An app brings its own entities (capabilities, permits, inspections…) and gets tenancy, auth, audit, and accessibility for free.
 
-For the full model, see [Data Model](./docs/data-model.md) and [Data and Traceability](./docs/architect/data-and-traceability.md).
+Planned packages (see design §3):
 
-## Who It Is For
-
-GovEA is designed for public-sector teams that need useful enterprise architecture without heavyweight tooling overhead:
-
-- enterprise architects and domain architects
-- agency EA coordinators
-- department leaders and business stakeholders
-- budget, performance, and planning analysts
-- data architects and application portfolio owners
-- instance and organization administrators
-
-Persona definitions live in [business-architecture/personas](./business-architecture/personas/). Persona journey findings live in [docs/persona-journeys](./docs/persona-journeys/).
-
-## Current Shape
-
-The product is in active development. The shipped surface includes the core EA repository, traceability views, taxonomy, reporting, role-based access, audit, local/container development, and a growing set of import/export and admin capabilities.
-
-For detail, use these source-of-truth documents:
-
-| Topic | Details |
+| Package | Responsibility |
 |---|---|
-| Product capabilities and status | [capabilities.md](./capabilities.md) |
-| Current priorities | [docs/product-priorities.md](./docs/product-priorities.md) |
-| Product and delivery risks | [docs/risk-register.md](./docs/risk-register.md) |
-| Architecture overview | [docs/architect/README.md](./docs/architect/README.md) |
-| Runtime and deployment | [docs/architect/runtime-and-deployment.md](./docs/architect/runtime-and-deployment.md) |
-| Security and tenancy | [docs/architect/security-and-tenancy.md](./docs/architect/security-and-tenancy.md) |
-| Data model | [docs/data-model.md](./docs/data-model.md) |
-| Standards for AI-assisted work | [Standards.md](./Standards.md) |
+| `@govcore/schema` | Platform tables + enums + migrations + `govcore-migrate` runner |
+| `@govcore/tenancy` | Memberships, active-org resolution, org guards |
+| `@govcore/rbac` | Generic role/permission machinery (`createRbac`) |
+| `@govcore/auth` | Auth.js config factory, SSO guard, sessions |
+| `@govcore/audit` | Append-only audit writer + trigger |
+| `@govcore/federation` | Org connections + cross-org links + visibility |
+| `@govcore/support` | Break-glass + act-as + instance admin |
+| `@govcore/backup` | Whole-tenant export/restore to file |
+| `@govcore/middleware` | Edge-safe Next middleware factory |
+| `@govcore/theme` | WCAG-AA base theme + safe theming |
+| `@govcore/server` | `tenantAction` + tenant transaction |
+| `@govcore/nextkit` | UI primitives + reusable instance-console React |
+| `@govcore/content` | Content engine (second milestone) |
 
-## Tech Stack
+## Opinionated stack
+
+GovCore assumes one stack and ships batteries-included for it:
 
 - **App:** Next.js App Router, React, TypeScript
-- **Database:** PostgreSQL with Drizzle ORM
-- **Auth:** Auth.js with local development auth and OIDC SSO architecture
-- **UI:** Tailwind CSS and shadcn/ui
-- **Testing:** TypeScript, ESLint, Vitest integration tests, Playwright smoke tests
-- **Deployment:** containerized app plus PostgreSQL
+- **Database:** PostgreSQL with Drizzle ORM (tenant isolation enforced by Row-Level Security)
+- **Auth:** Auth.js (local credentials + OIDC SSO)
+- **UI:** Tailwind CSS + shadcn/ui, on a WCAG-AA base theme
 
-For deeper technical notes, start with [docs/architect](./docs/architect/).
+An app on a different stack is out of scope by design — that is the trade for batteries-included reuse.
 
-## Quick Start
+## Development
 
-Prerequisites:
-
-- Node.js 20 or newer
-- pnpm 9 or newer
-- Docker or Podman for local database/container workflows
-
-Clone and verify:
+Prerequisites: Node.js 20+, pnpm 9+, and Podman or Docker for a local Postgres.
 
 ```bash
-git clone https://github.com/roballred/GovEA.git
-cd GovEA
-pnpm verify
+pnpm install
 ```
 
-`pnpm verify` installs dependencies and runs the core local checks: type check, lint, and business-architecture docs lint.
+> **Note:** database-backed tests run in CI (the maintainer machine has no local Postgres). The platform layer is **migration-based from day one** (`govcore-migrate`), not `db:push` — see the design doc §5.
 
-Start a local demo database and app:
+## Relationship to GovEA
 
-```bash
-pnpm demo:start
-```
-
-Common local commands:
-
-```bash
-pnpm demo:db          # start Postgres only
-pnpm demo:db:stop     # stop Postgres
-pnpm demo:container   # run the full container stack
-pnpm demo:stop        # stop the demo stack
-```
-
-For manual database work:
-
-```bash
-pnpm --filter govea db:migrate
-pnpm --filter govea db:seed
-pnpm --filter govea dev
-```
-
-## Development Workflow
-
-GovEA follows the project standards in [Standards.md](./Standards.md):
-
-- humans own direction, review, and merge decisions
-- work starts from tracked issues
-- capability and persona traceability matter
-- all changes go through pull requests
-- tests or explicit validation notes are expected for every change
-
-Pull requests normally run:
-
-- type check
-- lint
-- business-architecture docs lint
-- production build
-- integration tests
-- Playwright smoke tests
-
-## Architecture And Product Docs
-
-Use the README as the starting point, not the full manual. Detailed material belongs in these docs:
-
-- [Capabilities](./capabilities.md)
-- [Architecture Overview](./docs/architect/README.md)
-- [Application Overview](./docs/architect/application-overview.md)
-- [Data and Traceability](./docs/architect/data-and-traceability.md)
-- [Runtime and Deployment](./docs/architect/runtime-and-deployment.md)
-- [Security and Tenancy](./docs/architect/security-and-tenancy.md)
-- [Data Model](./docs/data-model.md)
-- [Product Priorities](./docs/product-priorities.md)
-- [Risk Register](./docs/risk-register.md)
-- [Business Architecture Style Guide](./business-architecture/STYLE.md)
-
-## Framework Alignment
-
-GovEA is EasyEA-first. External frameworks such as TOGAF should support government teams without replacing the core workflow.
-
-Framework support is taxonomy-and-recipe-backed ([ADR-0002: ADM as Classification](./docs/decisions/0002-adm-as-classification.md)): installing the TOGAF recipe gives an organization Architecture Domain and ADM Phase classifications, and the TOGAF reports read from that taxonomy — there is no hard-coded overlay. Current framework-alignment detail is tracked in [capabilities.md](./capabilities.md) and [ADR-0001: TOGAF and ADM Scope Boundary](./docs/decisions/0001-togaf-adm-scope.md).
-
-## Deployment Notes
-
-GovEA is container-friendly and designed to run against PostgreSQL. Local development can use Docker or Podman. Azure demo deployment helpers are present, but operator-specific Azure account configuration belongs in private operator environments, not this public repository.
-
-See [Runtime and Deployment](./docs/architect/runtime-and-deployment.md) for architecture details and [Release Pipeline Policy](./docs/release-pipeline.md) for deployment privacy guidance.
+GovCore is a **standalone initiative** with its own repository, backlog, and release lifecycle. GovEA depends on it as a normal versioned dependency — there is no submodule and no shared monorepo. Work happens in GovCore without touching GovEA.
 
 ## License
 
-GovEA is released under the [MIT License](./LICENSE).
+MIT — see [LICENSE](./LICENSE).

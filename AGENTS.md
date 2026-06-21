@@ -1,57 +1,32 @@
-# GovEA — Project Instructions for OpenAI Codex
+# GovCore — Project Instructions for OpenAI Codex
 
-> **Before any work, read CLAUDE.md, Standards.md, and docs/AI-SESSION-START.md — they are authoritative and override this file. If this file conflicts with them, they govern.**
+> **Before any work, read [`docs/design/platform-core-extraction.md`](./docs/design/platform-core-extraction.md) and [`CLAUDE.md`](./CLAUDE.md) — they are authoritative and override this file.**
 
-This file is a Codex-specific pointer and guardrail layer. It does not replace the project operating policy, traceability rules, database workflow, or governing AI standards.
+This is a Codex-specific pointer and guardrail layer. It does not replace the governing plan.
+
+## What GovCore Is
+
+A reusable, opinionated multi-tenant **platform core** for Next.js apps, published as `@govcore/*` packages (identity, tenancy, RBAC, audit, federation, support sessions, middleware, theming; a content engine later). A **standalone initiative**, separate from [GovEA](https://github.com/roballred/GovEA), which is its first consumer. **Do not modify GovEA from this repo.**
 
 ## Required Reading Order
 
-1. [`Standards.md`](./Standards.md) — governing document for AI-assisted work, EasyEA traceability, personas, capabilities, issue-first development, and PR review.
-2. [`CLAUDE.md`](./CLAUDE.md) — operational policy for GovEA, including the database workflow, required pre-flight checklist, and commit/PR traceability format.
-3. [`docs/AI-SESSION-START.md`](./docs/AI-SESSION-START.md) — canonical session bootstrap with current workflow, CI, GitHub CLI, deployment, and drift-prone operating policies.
+1. [`docs/design/platform-core-extraction.md`](./docs/design/platform-core-extraction.md) — the governing plan: architecture, locked decisions, package layout, phased extraction, security hardening.
+2. [`CLAUDE.md`](./CLAUDE.md) — operating policy: current state, database workflow, git/commit rules, what NOT to carry over from GovEA.
 
-Read those documents before editing files, running mutating commands, creating branches, or opening PRs.
+## Current State
 
-## Branch & PR Hygiene (required)
+This repo was seeded from a full copy of GovEA `main` as the extraction baseline, so most of it is **GovEA legacy** being carved into `@govcore/*` packages. `Standards.md`, `docs/AI-SESSION-START.md`, `business-architecture/`, and `apps/govea/` are inherited-from-seed, not GovCore canon — extract from or delete them; don't treat them as policy.
 
-- Always start from current origin/main; never reuse or revive an existing branch.
-- A PR behind main at open time must be rebased onto main before review; if it can't cleanly rebase, start over from main.
-- One concern per PR. Never bundle unrelated changes.
-- Never reopen or re-push a closed PR or deleted branch. If closed work is still needed, open a NEW branch off current main and a NEW PR.
-- Check before writing: search main for an existing implementation before adding a feature; if it already exists, stop.
-- Schema changes use `db:push` + `src/db/sql/*.sql` (apply-triggers). NEVER create `apps/govea/src/db/migrations/` — that directory is drift; delete it if it appears.
+## Branch & PR Hygiene
 
-## Pre-Flight Checklist
-
-Before writing code or docs, complete the full checklist in [`CLAUDE.md`](./CLAUDE.md):
-
-- Confirm a GitHub issue exists with clear scope.
-- Confirm the issue has a `Capability:` or `Capability group:` line using the relevant EasyEA capability ID from `business-architecture/capabilities/`.
-- Confirm the issue names the persona(s) served.
-- Confirm acceptance criteria are clear enough to know when the work is done.
-
-If the task arrives informally, create the issue first and confirm its content before implementing. If no capability doc fits, say so explicitly in the issue instead of inventing a capability ID.
-
-## Traceability Requirements
-
-Every implementation commit must include the capability ID and issue reference in the message body:
-
-```text
-Capability: <capability-id>
-Closes #<issue-number>
-```
-
-Every PR description must include:
-
-- `Closes #<issue-number>`
-- `Capability: <capability-id>` or `Capability group: <group>`
-- `Persona: <persona>`
-- What changed, why it changed, and how it was verified
-
-Use [`CLAUDE.md`](./CLAUDE.md) for the full required format. Traceability is part of the product governance model, not optional PR decoration.
+- Start from current `origin/main`; never revive an old branch. One concern per PR.
+- Humans merge PRs. Never push directly to `main`, force-push `main`, or bypass hooks.
+- Platform schema changes use migrations (`govcore-migrate`), **not** `db:push`. Never reintroduce GovEA's pre-production push flow for platform tables.
 
 ## Scope Discipline
 
-Keep each branch and PR focused on the issue being closed. Do not include opportunistic fixes, unrelated refactors, generated migrations, deployment topology, local environment files, or cleanup that belongs in a separate issue.
+Keep each branch/PR focused. No opportunistic refactors, operator/deploy topology, or `.env` files. Before opening a PR, verify the diff contains only intended files; if unexpected files appear, stop and remove them.
 
-Before opening a PR, verify the diff contains only intended files. If unexpected files appear, stop and remove them from the branch before pushing.
+## Not Applicable Here
+
+GovEA's product process does **not** apply to GovCore: no Azure deploy rules, no EasyEA issue → capability → persona pre-flight, no GovEA milestones/ARB. GovCore defines its own lightweight traceability when it needs one; until then the design doc + `CLAUDE.md` are the working agreement.
