@@ -1,11 +1,14 @@
 {
-  "name": "govea-monorepo",
+  "name": "govcore-monorepo",
   "private": true,
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",
     "lint": "turbo lint",
     "test": "turbo test",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "release": "changeset publish",
     "verify": "bash scripts/bootstrap-verify.sh",
     "demo:start": "bash scripts/demo-start.sh",
     "demo:db": "bash scripts/demo-db.sh",
@@ -16,6 +19,7 @@
     "demo:stop": "bash scripts/container-compose.sh demo down"
   },
   "devDependencies": {
+    "@changesets/cli": "^2.27.0",
     "turbo": "^2.0.0",
     "typescript": "^5.5.0"
   },
