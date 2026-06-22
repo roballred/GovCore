@@ -8,8 +8,8 @@ design is [`docs/design/platform-core-extraction.md`](../docs/design/platform-co
 
 | Package | Responsibility | Phase |
 |---|---|---|
-| `@govcore/schema` | Platform tables, enums, migrations, `govcore-migrate` runner | 1 |
-| `@govcore/rbac` | Generic role/permission machinery (`createRbac`) | 0 |
+| `@govcore/schema` | Platform tables, enums, migrations, `govcore-migrate` runner — **implemented** | 1 |
+| `@govcore/rbac` | Generic role/permission machinery (`createRbac`) — **implemented** | 0 |
 | `@govcore/audit` | Append-only audit writer + trigger | 2 |
 | `@govcore/tenancy` | Memberships, active-org resolution, org guards | 2 |
 | `@govcore/testing` | Test factories for consumers (`createTestOrg`/`User`, `withActiveMembership`) | 0+ |

@@ -9,12 +9,32 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./migrate": {
+      "types": "./src/migrate.ts",
+      "default": "./src/migrate.ts"
     }
   },
+  "bin": {
+    "govcore-migrate": "./dist/migrate.js"
+  },
+  "files": [
+    "dist",
+    "src",
+    "migrations"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch"
   },
-  "publishConfig": { "access": "public" },
-  "devDependencies": { "typescript": "^5.5.0" }
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.45.2",
+    "postgres": "^3.4.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  }
 }

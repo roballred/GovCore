@@ -711,25 +711,28 @@ Net effect: a compromised *app* role cannot rewrite audit history (already true 
 
 **The problem, grounded.** `@govea/core/rbac` hardcodes `type Role = 'admin' | 'contributor' | 'viewer'` and a fixed seven-permission map. §2 of this doc files RBAC as "already shared, just promote it" — but that ships *GovEA's domain vocabulary* to every consumer. CivicTrack's `inspector` role has nowhere to go. This is the difference between "reusable" and "GovEA with extra steps."
 
-**The method.** Core ships the *machinery* generic over the app's own types:
+**The method.** Core ships the *machinery* generic over the app's own types, carrying **no fixed roles of its own**:
 
 ```ts
-// @govcore/rbac
+// @govcore/rbac — pure, edge-safe, dependency-free
 export function createRbac<R extends string, P extends string>(def: {
-  rolePermissions: Record<R, P[]>
+  rolePermissions: Record<R, readonly P[]>
   hierarchy: Record<R, number>
-}) {
-  return { hasPermission, roleAtLeast, roleIsAdmin /* … all typed to R, P */ }
+}): Rbac<R, P> {
+  // → { hasPermission, roleAtLeast, permissionsFor, topRole, roles } — all typed to R, P
 }
 ```
 
-GovEA's current map becomes the default export and the worked example:
+The app supplies its own role map; the GovEA instance is a **consumer-side** worked example, deliberately kept *out* of the reusable package so `@govcore/rbac` carries zero app-specific vocabulary:
 
 ```ts
-export const goveaRbac = createRbac({ rolePermissions: GOVEA_ROLE_PERMISSIONS, hierarchy: GOVEA_HIERARCHY })
+// in the consumer (@govea/core), NOT in @govcore/rbac
+export const goveaRbac = createRbac<Role, Permission>({ rolePermissions: ROLE_PERMISSIONS, hierarchy: ROLE_HIERARCHY })
 ```
 
-Zero behavior change for GovEA, and the existing `rbac-single-source` integration test still passes — GovEA still has exactly one definition, now produced by `createRbac(...)`. `tenantAction({ permission })` and the separate `instanceRole` check stay; `permission`/`role` simply become the app's unions.
+Zero behavior change for GovEA, and the existing `rbac-single-source` test still passes — GovEA still has exactly one definition, now produced by `createRbac(...)`. App-specific helpers (`roleIsAdmin`, `roleCanEdit`) and the separate `instanceRole` check stay consumer-side too. **Consistency consequence:** because roles are now app-defined, platform tables store `role` as **`text`, not a fixed `pgEnum`** (see §13.1 and `@govcore/schema`).
+
+> **Status — implemented (GovCore step 4).** `@govcore/rbac` ships the generic `createRbac`; `@govea/core` builds GovEA's instance on it. This refines the earlier draft of this section, which had located `goveaRbac` *inside* `@govcore/rbac` — keeping it in the consumer is the cleaner separation.
 
 ### 13.4 Composition & developer-experience methods
 
