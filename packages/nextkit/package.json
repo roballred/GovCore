@@ -1,0 +1,27 @@
+{
+  "name": "@govcore/nextkit",
+  "version": "0.0.0",
+  "description": "Reusable React: layout primitives + instance-console UI (presentational; data passed as props)",
+  "type": "module",
+  "main": "./src/index.tsx",
+  "types": "./src/index.tsx",
+  "exports": {
+    ".": {
+      "types": "./src/index.tsx",
+      "default": "./src/index.tsx"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch"
+  },
+  "publishConfig": { "access": "public" },
+  "peerDependencies": {
+    "react": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "react": "^19.0.0",
+    "typescript": "^5.5.0"
+  }
+}

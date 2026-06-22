@@ -31,7 +31,7 @@ To avoid hollow packages, these are scaffolded at the start of their phase rathe
 | `@govcore/backup` | Whole-tenant export/restore to file | 4 |
 | `@govcore/theme` | WCAG-AA base theme + safe theming — **implemented** | 4 |
 | `@govcore/server` | `tenantAction` + tenant transaction — **implemented** | 4 |
-| `@govcore/nextkit` | UI primitives + reusable instance-console React | 4 |
+| `@govcore/nextkit` | UI primitives + reusable instance-console React — **implemented** | 4 |
 | `@govcore/content` | Content engine (define-a-type-as-data) | Second milestone (Appendix B) |
 
 ## Legacy
