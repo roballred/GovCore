@@ -13,6 +13,10 @@
     "./logout-marker": {
       "types": "./src/logout-marker.ts",
       "default": "./src/logout-marker.ts"
+    },
+    "./password": {
+      "types": "./src/password.ts",
+      "default": "./src/password.ts"
     }
   },
   "scripts": {
