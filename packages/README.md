@@ -24,8 +24,8 @@ To avoid hollow packages, these are scaffolded at the start of their phase rathe
 
 | Package | Responsibility | Phase |
 |---|---|---|
-| `@govcore/auth` | Auth.js config factory, SSO guard, sessions | 3 |
-| `@govcore/middleware` | Edge-safe Next middleware factory | 3 |
+| `@govcore/auth` | `createAuth` factory, SSO guard, password, sessions — **implemented** | 3 |
+| `@govcore/middleware` | Edge-safe `createMiddleware` factory — **implemented** | 3 |
 | `@govcore/federation` | Org connections, cross-org links, visibility | 4 |
 | `@govcore/support` | Break-glass + act-as + instance admin | 4 |
 | `@govcore/backup` | Whole-tenant export/restore to file | 4 |

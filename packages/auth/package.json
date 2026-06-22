@@ -1,0 +1,44 @@
+{
+  "name": "@govcore/auth",
+  "version": "0.0.0",
+  "description": "Auth.js config factory (createAuth): credentials + injected OIDC, SSO guard, active-membership session, login/logout audit",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./logout-marker": {
+      "types": "./src/logout-marker.ts",
+      "default": "./src/logout-marker.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch"
+  },
+  "publishConfig": { "access": "public" },
+  "dependencies": {
+    "@auth/drizzle-adapter": "^1.4.0",
+    "@govcore/audit": "workspace:*",
+    "@govcore/schema": "workspace:*",
+    "@govcore/tenancy": "workspace:*",
+    "bcryptjs": "^2.4.3",
+    "drizzle-orm": "^0.45.2",
+    "next-auth": "^5.0.0-beta.25"
+  },
+  "peerDependencies": {
+    "next": "^15.0.0",
+    "react": "^19.0.0"
+  },
+  "devDependencies": {
+    "@auth/core": "0.41.2",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/react": "^19.0.0",
+    "next": "^15.5.0",
+    "react": "^19.0.0",
+    "typescript": "^5.5.0"
+  }
+}
