@@ -88,13 +88,13 @@ ALTER TABLE govcore.org_connections ENABLE ROW LEVEL SECURITY;
 ALTER TABLE govcore.org_connections FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS org_connections_participant ON govcore.org_connections;
 CREATE POLICY org_connections_participant ON govcore.org_connections
-  USING (current_setting('app.current_org', true)::uuid IN (from_org_id, to_org_id));
+  USING (nullif(current_setting('app.current_org', true), '')::uuid IN (from_org_id, to_org_id));
 
 ALTER TABLE govcore.cross_org_links ENABLE ROW LEVEL SECURITY;
 ALTER TABLE govcore.cross_org_links FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS cross_org_links_participant ON govcore.cross_org_links;
 CREATE POLICY cross_org_links_participant ON govcore.cross_org_links
-  USING (current_setting('app.current_org', true)::uuid IN (source_org_id, target_org_id));
+  USING (nullif(current_setting('app.current_org', true), '')::uuid IN (source_org_id, target_org_id));
 
 -- break_glass_sessions, act_as_sessions, instance_settings, platform_config are
 -- intentionally NOT under org-GUC RLS: they are instance-operator / singleton

@@ -40,13 +40,13 @@ ALTER TABLE govcore.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE govcore.users FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS users_org_isolation ON govcore.users;
 CREATE POLICY users_org_isolation ON govcore.users
-  USING (organization_id = current_setting('app.current_org', true)::uuid);
+  USING (organization_id = nullif(current_setting('app.current_org', true), '')::uuid);
 
 ALTER TABLE govcore.user_organization_memberships ENABLE ROW LEVEL SECURITY;
 ALTER TABLE govcore.user_organization_memberships FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS memberships_org_isolation ON govcore.user_organization_memberships;
 CREATE POLICY memberships_org_isolation ON govcore.user_organization_memberships
-  USING (organization_id = current_setting('app.current_org', true)::uuid);
+  USING (organization_id = nullif(current_setting('app.current_org', true), '')::uuid);
 
 ALTER TABLE govcore.audit_log ENABLE ROW LEVEL SECURITY;
 ALTER TABLE govcore.audit_log FORCE ROW LEVEL SECURITY;
@@ -55,5 +55,5 @@ DROP POLICY IF EXISTS audit_org_isolation ON govcore.audit_log;
 -- (e.g. cross-org support actions record an audit row). Immutability is the
 -- trigger above; UPDATE/DELETE never reach the policy.
 CREATE POLICY audit_org_isolation ON govcore.audit_log
-  USING (organization_id IS NULL OR organization_id = current_setting('app.current_org', true)::uuid)
+  USING (organization_id IS NULL OR organization_id = nullif(current_setting('app.current_org', true), '')::uuid)
   WITH CHECK (true);
