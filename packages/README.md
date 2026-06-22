@@ -10,9 +10,13 @@ design is [`docs/design/platform-core-extraction.md`](../docs/design/platform-co
 |---|---|---|
 | `@govcore/schema` | Platform tables, enums, migrations, `govcore-migrate` runner — **implemented** | 1 |
 | `@govcore/rbac` | Generic role/permission machinery (`createRbac`) — **implemented** | 0 |
-| `@govcore/audit` | Append-only audit writer + trigger | 2 |
-| `@govcore/tenancy` | Memberships, active-org resolution, org guards | 2 |
-| `@govcore/testing` | Test factories for consumers (`createTestOrg`/`User`, `withActiveMembership`) | 0+ |
+| `@govcore/audit` | Append-only audit writer (trigger ships in `@govcore/schema`) — **implemented** | 2 |
+| `@govcore/tenancy` | Active-org resolution + membership/org guards — **implemented** | 2 |
+| `@govcore/testing` | Test factories (`createTestDb`/`Org`/`User`, `addMembership`, `withTenant`) — **implemented** | 0+ |
+
+An end-to-end smoke harness lives in `examples/smoke` (`pnpm smoke` with `DATABASE_URL` set): it
+runs `govcore-migrate` then exercises rbac/tenancy/audit, the audit-immutability trigger, and RLS
+isolation under a non-owner role.
 
 ## Created when their phase begins
 

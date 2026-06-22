@@ -16,5 +16,9 @@
     "dev": "tsc -p tsconfig.json --watch"
   },
   "publishConfig": { "access": "public" },
+  "dependencies": {
+    "@govcore/schema": "workspace:*",
+    "drizzle-orm": "^0.45.2"
+  },
   "devDependencies": { "typescript": "^5.5.0" }
 }

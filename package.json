@@ -8,10 +8,12 @@
     "test": "turbo test",
     "changeset": "changeset",
     "version-packages": "changeset version",
-    "release": "changeset publish"
+    "release": "changeset publish",
+    "smoke": "pnpm --filter @govcore/example-smoke smoke"
   },
   "devDependencies": {
     "@changesets/cli": "^2.27.0",
+    "@types/node": "^22.0.0",
     "turbo": "^2.0.0",
     "typescript": "^5.5.0"
   },

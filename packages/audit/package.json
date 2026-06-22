@@ -1,7 +1,7 @@
 {
   "name": "@govcore/audit",
   "version": "0.0.0",
-  "description": "Append-only audit writer and trigger",
+  "description": "Append-only audit writer (the immutability trigger ships in @govcore/schema)",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -16,5 +16,9 @@
     "dev": "tsc -p tsconfig.json --watch"
   },
   "publishConfig": { "access": "public" },
+  "dependencies": {
+    "@govcore/schema": "workspace:*",
+    "drizzle-orm": "^0.45.2"
+  },
   "devDependencies": { "typescript": "^5.5.0" }
 }
