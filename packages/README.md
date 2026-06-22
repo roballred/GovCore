@@ -29,8 +29,8 @@ To avoid hollow packages, these are scaffolded at the start of their phase rathe
 | `@govcore/federation` | Org connections, cross-org links, visibility | 4 |
 | `@govcore/support` | Break-glass + act-as + instance admin | 4 |
 | `@govcore/backup` | Whole-tenant export/restore to file | 4 |
-| `@govcore/theme` | WCAG-AA base theme + safe theming | 4 |
-| `@govcore/server` | `tenantAction` + tenant transaction | 4 |
+| `@govcore/theme` | WCAG-AA base theme + safe theming — **implemented** | 4 |
+| `@govcore/server` | `tenantAction` + tenant transaction — **implemented** | 4 |
 | `@govcore/nextkit` | UI primitives + reusable instance-console React | 4 |
 | `@govcore/content` | Content engine (define-a-type-as-data) | Second milestone (Appendix B) |
 

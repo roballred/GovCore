@@ -1,0 +1,65 @@
+/*
+ * @govcore/theme — base design tokens (the WCAG-AA accessibility floor).
+ *
+ * Import once in an app's global stylesheet: `@import '@govcore/theme/base.css';`
+ * Brand themes override ONLY the allowlisted brand vars (see defineTheme); the
+ * content/contrast tokens below hold the accessibility line and must not be
+ * weakened. Values are HSL channels (used as `hsl(var(--token))`).
+ */
+
+:root {
+  --background: 0 0% 100%;
+  --foreground: 222 47% 11%;
+
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+
+  --muted: 210 16% 96%;
+  --muted-foreground: 215 16% 35%; /* ≥4.5:1 on --background */
+
+  --primary: 221 70% 38%; /* ≥4.5:1 on white */
+  --primary-foreground: 0 0% 100%;
+
+  --destructive: 0 72% 38%;
+  --destructive-foreground: 0 0% 100%;
+
+  --border: 214 20% 88%;
+  --input: 214 20% 88%;
+  --ring: 221 70% 38%;
+
+  /* Brand surface (allowlisted) */
+  --header-bg: 221 56% 22%;
+  --header-fg: 214 40% 93%;
+
+  --radius: 0.5rem;
+}
+
+.dark {
+  --background: 222 47% 11%;
+  --foreground: 210 40% 96%;
+
+  --card: 222 47% 13%;
+  --card-foreground: 210 40% 96%;
+
+  --muted: 217 33% 18%;
+  --muted-foreground: 215 20% 70%; /* ≥4.5:1 on dark --background */
+
+  --primary: 213 90% 66%; /* ≥4.5:1 on dark --background */
+  --primary-foreground: 222 47% 11%;
+
+  --destructive: 0 72% 60%;
+  --destructive-foreground: 222 47% 11%;
+
+  --border: 217 33% 24%;
+  --input: 217 33% 24%;
+  --ring: 213 90% 66%;
+
+  --header-bg: 222 47% 9%;
+  --header-fg: 210 40% 92%;
+}
+
+/* Visible focus ring everywhere (WCAG 2.4.7) — apps may restyle but not remove. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}

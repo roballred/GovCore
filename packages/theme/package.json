@@ -1,0 +1,28 @@
+{
+  "name": "@govcore/theme",
+  "version": "0.0.0",
+  "description": "WCAG-AA base theme: design tokens (base.css), a Tailwind preset, and defineTheme with a brand-var allowlist",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./base.css": "./base.css"
+  },
+  "files": ["dist", "src", "base.css"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch"
+  },
+  "publishConfig": { "access": "public" },
+  "peerDependencies": {
+    "tailwindcss": "^3.4.0"
+  },
+  "peerDependenciesMeta": {
+    "tailwindcss": { "optional": true }
+  },
+  "devDependencies": { "typescript": "^5.5.0" }
+}
