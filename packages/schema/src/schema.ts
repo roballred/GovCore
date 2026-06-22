@@ -16,6 +16,7 @@ import {
   pgSchema,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core'
@@ -25,6 +26,9 @@ export const govcore = pgSchema('govcore')
 
 /** Content/federation visibility. Used by the federation package (later phase). */
 export const visibility = govcore.enum('visibility', ['org', 'connections', 'instance'])
+
+/** Generic workflow status shared by federation connections and links. */
+export const federationStatus = govcore.enum('federation_status', ['pending', 'active', 'rejected'])
 
 // ── Tenancy root ────────────────────────────────────────────────────────────
 
@@ -169,6 +173,120 @@ export const auditLog = govcore.table('audit_log', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
 })
 
+// ── Federation (cross-organization connections and content links) ──────────
+
+/** Explicit bilateral connection between two organizations. */
+export const orgConnections = govcore.table(
+  'org_connections',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    fromOrgId: uuid('from_org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    toOrgId: uuid('to_org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    status: federationStatus('status').notNull().default('pending'),
+    createdBy: uuid('created_by').references(() => users.id),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (t) => [unique('unique_org_connection').on(t.fromOrgId, t.toOrgId)],
+)
+
+/** Approved relationship between content items across orgs. No FK on entity ids
+ *  (they cross org boundaries); link semantics are app-defined (`link_type` text). */
+export const crossOrgLinks = govcore.table('cross_org_links', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  sourceOrgId: uuid('source_org_id')
+    .notNull()
+    .references(() => organizations.id, { onDelete: 'cascade' }),
+  sourceEntityType: text('source_entity_type').notNull(),
+  sourceEntityId: uuid('source_entity_id').notNull(),
+  targetOrgId: uuid('target_org_id')
+    .notNull()
+    .references(() => organizations.id, { onDelete: 'cascade' }),
+  targetEntityType: text('target_entity_type').notNull(),
+  targetEntityId: uuid('target_entity_id').notNull(),
+  linkType: text('link_type').notNull(),
+  status: federationStatus('status').notNull().default('pending'),
+  rejectionReason: text('rejection_reason'),
+  flaggedForReview: boolean('flagged_for_review').notNull().default(false),
+  flagReason: text('flag_reason'),
+  createdBy: uuid('created_by').references(() => users.id),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+})
+
+// ── Support access (break-glass + act-as) ──────────────────────────────────
+// Instance-operator constructs that deliberately cross the tenant boundary, so
+// they are NOT under the org-GUC RLS (the actor is an instance admin operating
+// across orgs). Authorization is enforced in @govcore/support (design §6.6).
+
+export const breakGlassSessions = govcore.table('break_glass_sessions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  instanceAdminId: uuid('instance_admin_id')
+    .notNull()
+    .references(() => users.id),
+  targetOrgId: uuid('target_org_id')
+    .notNull()
+    .references(() => organizations.id),
+  reason: text('reason').notNull(),
+  grantedAt: timestamp('granted_at').notNull().defaultNow(),
+  expiresAt: timestamp('expires_at').notNull(),
+  requiresApproval: boolean('requires_approval').notNull().default(false),
+  approvedAt: timestamp('approved_at'),
+  approvedBy: uuid('approved_by').references(() => users.id),
+  revokedAt: timestamp('revoked_at'),
+  revokedBy: uuid('revoked_by').references(() => users.id),
+})
+
+export const actAsSessions = govcore.table('act_as_sessions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  breakGlassSessionId: uuid('break_glass_session_id')
+    .notNull()
+    .references(() => breakGlassSessions.id),
+  instanceAdminId: uuid('instance_admin_id')
+    .notNull()
+    .references(() => users.id),
+  targetOrgId: uuid('target_org_id')
+    .notNull()
+    .references(() => organizations.id),
+  startedAt: timestamp('started_at').notNull().defaultNow(),
+  expiresAt: timestamp('expires_at').notNull(),
+  endedAt: timestamp('ended_at'),
+  endReason: text('end_reason'),
+})
+
+export const ACT_AS_DEFAULT_TTL_MINUTES = 30
+export const ACT_AS_END_REASONS = [
+  'admin_ended',
+  'expired',
+  'parent_revoked',
+  'parent_expired',
+] as const
+export type ActAsEndReason = (typeof ACT_AS_END_REASONS)[number]
+
+// ── Instance / platform configuration (singletons; not org-scoped) ─────────
+
+export const instanceSettings = govcore.table('instance_settings', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  disabledModules: jsonb('disabled_modules').$type<Record<string, boolean>>().notNull().default({}),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+})
+
+export const platformConfig = govcore.table('platform_config', {
+  id: text('id').primaryKey().default('singleton'),
+  instanceName: text('instance_name').notNull().default('GovCore'),
+  defaultTheme: text('default_theme').notNull().default('base'),
+  allowLocalAuth: boolean('allow_local_auth').notNull().default(true),
+  /** Stamped onto new orgs at provisioning time. Null means no tier. */
+  defaultSupportTier: text('default_support_tier'),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  updatedBy: uuid('updated_by').references(() => users.id, { onDelete: 'set null' }),
+})
+
 // ── Inferred types ──────────────────────────────────────────────────────────
 
 export type Organization = typeof organizations.$inferSelect
@@ -179,3 +297,15 @@ export type UserOrganizationMembership = typeof userOrganizationMemberships.$inf
 export type NewUserOrganizationMembership = typeof userOrganizationMemberships.$inferInsert
 export type AuditEntry = typeof auditLog.$inferSelect
 export type NewAuditEntry = typeof auditLog.$inferInsert
+export type OrgConnection = typeof orgConnections.$inferSelect
+export type NewOrgConnection = typeof orgConnections.$inferInsert
+export type CrossOrgLink = typeof crossOrgLinks.$inferSelect
+export type NewCrossOrgLink = typeof crossOrgLinks.$inferInsert
+export type BreakGlassSession = typeof breakGlassSessions.$inferSelect
+export type NewBreakGlassSession = typeof breakGlassSessions.$inferInsert
+export type ActAsSession = typeof actAsSessions.$inferSelect
+export type NewActAsSession = typeof actAsSessions.$inferInsert
+export type InstanceSettings = typeof instanceSettings.$inferSelect
+export type NewInstanceSettings = typeof instanceSettings.$inferInsert
+export type PlatformConfig = typeof platformConfig.$inferSelect
+export type NewPlatformConfig = typeof platformConfig.$inferInsert
