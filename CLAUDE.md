@@ -13,9 +13,13 @@ It is a **standalone initiative**, separate from [GovEA](https://github.com/roba
 
 ## Current State — read this before editing
 
-This repo was **seeded from a full copy of GovEA `main`** (commit `19b4bdf`) as the extraction baseline. So right now it *is* the GovEA codebase. The work is to carve the reusable platform plane out into `@govcore/*` packages and remove the GovEA-specific domain, per the design doc's phased plan.
+GovCore was seeded from GovEA `main` (commit `19b4bdf`) and the **GovEA-specific seed has now been stripped** — no `apps/govea`, no `@govea/core`, no `business-architecture/`, `Standards.md`, GovEA docs, scripts, docker, or CI. What remains is a clean, packages-only monorepo: the `@govcore/*` packages, the design doc, and tooling.
 
-That means much of what's here is **GovEA legacy inherited from the seed, not GovCore canon yet** — including `Standards.md`, `docs/AI-SESSION-START.md`, `business-architecture/`, `apps/govea/`, and the EasyEA capability/persona model. Treat those as material to extract-from or delete, not as governing GovCore policy. The design doc is the policy.
+**Implemented so far:** `@govcore/rbac` (generic `createRbac`) and `@govcore/schema` (platform tables in the `govcore` Postgres schema + migrations + `govcore-migrate` + RLS). The other packages (`audit`, `tenancy`, `auth`, `middleware`, `federation`, `support`, `backup`, `theme`, `server`, `nextkit`, `content`) are skeletons or not yet created — see `packages/README.md`.
+
+**Extraction source for later phases:** the platform code still to be ported (auth, middleware, federation, support, backup, theme) lives in the **sibling GovEA repo at `/Users/robbot/Repos/Claude/govea-app`** (read-only — never modify it). Read `apps/govea/src/lib/*` there as the source when implementing Phases 2–4.
+
+**Verification:** nothing is built here yet (no `node_modules`); typecheck and migrations run after `pnpm install` / in CI. There is no test harness yet — package-level tests and an `examples/` consumer are still to come.
 
 ## Locked Decisions (summary — full detail in the design doc)
 

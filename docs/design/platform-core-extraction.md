@@ -852,7 +852,7 @@ So the engine's skeleton is already sketched; what's missing is the substantial 
 
 #### Why it would be genuinely valuable for GovEA
 
-GovEA's whole framework story is *already* leaning this direction. [ADR-0002 ("ADM as classification")](../decisions/0002-adm-as-classification.md) decided that supporting TOGAF is **not** a hard-coded overlay — installing the **TOGAF recipe** simply gives an organization a set of taxonomy classifications, and the TOGAF reports read from that taxonomy. That is a content-engine move in miniature: a framework becomes *data you install*, not *code you ship*.
+GovEA's whole framework story is *already* leaning this direction. ADR-0002 ("ADM as classification", in the GovEA repo) decided that supporting TOGAF is **not** a hard-coded overlay — installing the **TOGAF recipe** simply gives an organization a set of taxonomy classifications, and the TOGAF reports read from that taxonomy. That is a content-engine move in miniature: a framework becomes *data you install*, not *code you ship*.
 
 A real content engine generalizes that pattern. A new framework, a new entity type, or a tenant-specific custom record would become a recipe + a content-type definition — installable per organization, with no migration and no deploy. For a product whose job is "model whatever an agency needs to model," that flexibility is strategically valuable.
 

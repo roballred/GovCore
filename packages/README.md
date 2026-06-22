@@ -30,11 +30,11 @@ To avoid hollow packages, these are scaffolded at the start of their phase rathe
 | `@govcore/nextkit` | UI primitives + reusable instance-console React | 4 |
 | `@govcore/content` | Content engine (define-a-type-as-data) | Second milestone (Appendix B) |
 
-## Legacy (to be removed)
+## Legacy
 
-| Path | Note |
-|---|---|
-| `packages/core` (`@govea/core`) | Inherited from the GovEA seed. Its real code (rbac/audit/taxonomy/…) is being promoted into the `@govcore/*` packages; delete once superseded. |
+The GovEA seed (including `packages/core` / `@govea/core`, `apps/govea`, and the
+EA domain) has been removed — this is now a clean, packages-only monorepo. Code
+still to be ported in later phases is read from the sibling GovEA repo.
 
 ## Conventions
 

@@ -8,7 +8,7 @@ A comprehensive **content engine** (define a content type as data, get storage/v
 
 ## Status
 
-**Early / in active extraction.** This repository was seeded from the [GovEA](https://github.com/roballred/GovEA) codebase — GovEA is the production app this platform plane is being extracted *from*, and is GovCore's first consumer. The repo currently contains that full GovEA baseline; the work in progress is carving the reusable platform code out into `@govcore/*` packages and removing the GovEA-specific domain.
+**Early / in active extraction.** This repository was seeded from the [GovEA](https://github.com/roballred/GovEA) codebase — GovEA is the production app this platform plane is being extracted *from*, and is GovCore's first consumer. The GovEA-specific seed has been stripped, leaving a clean packages-only monorepo. `@govcore/rbac` and `@govcore/schema` are implemented; the remaining packages are skeletons being filled in phase by phase. Platform code still to be ported is read from the sibling GovEA repo.
 
 **The plan is the source of truth:** [`docs/design/platform-core-extraction.md`](./docs/design/platform-core-extraction.md). Read it before doing anything here — it holds the architecture, the locked decisions, the package layout, the phased extraction plan, and the security hardening (RLS + two-role DB, generic RBAC, WCAG base theme, backup/restore, content engine).
 

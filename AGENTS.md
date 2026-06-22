@@ -15,7 +15,7 @@ A reusable, opinionated multi-tenant **platform core** for Next.js apps, publish
 
 ## Current State
 
-This repo was seeded from a full copy of GovEA `main` as the extraction baseline, so most of it is **GovEA legacy** being carved into `@govcore/*` packages. `Standards.md`, `docs/AI-SESSION-START.md`, `business-architecture/`, and `apps/govea/` are inherited-from-seed, not GovCore canon — extract from or delete them; don't treat them as policy.
+GovCore was seeded from GovEA `main`, and the **GovEA-specific seed has now been stripped** — it is a clean, packages-only monorepo. `@govcore/rbac` and `@govcore/schema` are implemented; the rest are skeletons (see `packages/README.md`). The platform code still to be ported (auth, middleware, federation, support, backup, theme) lives in the **sibling GovEA repo at `/Users/robbot/Repos/Claude/govea-app`** — read it as the source for Phases 2–4, but never modify it.
 
 ## Branch & PR Hygiene
 
