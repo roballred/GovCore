@@ -47,6 +47,7 @@ import {
   revokeCrossOrgLink,
 } from '@govcore/federation'
 import { cloneOrgInto, exportOrg, importOrg, registerBackupTables } from '@govcore/backup'
+import { buildContentTable, compileContentType, defineContentType } from '@govcore/content'
 
 const BASE = process.env.DATABASE_URL
 if (!BASE) {
@@ -365,6 +366,39 @@ async function main() {
   const removed = await removeLinksForConnection(lk.db, orgA.id, orgB.id, userA.id, orgA.id)
   check('removeLinksForConnection cleared remaining links', removed.length === 1 && (await getCrossOrgLinks(lk.db, orgA.id)).length === 0)
   await lk.close()
+
+  // 13. content engine: compile a type → a real table that RLS isolates like any other
+  console.log('• content engine: compile + RLS on a generated table')
+  const note = defineContentType({
+    name: 'note',
+    label: 'Note',
+    fields: [
+      { name: 'title', type: 'text', required: true },
+      { name: 'body', type: 'textarea' },
+    ],
+  })
+  const compiled = compileContentType(note)
+  const ddl = postgres(smokeUrl, { max: 1 })
+  await ddl.unsafe(compiled.sql) // apply the generated migration
+  // the generated table lives in its own schema; grant the non-owner runtime role
+  await ddl.unsafe(`GRANT USAGE ON SCHEMA ${compiled.schema} TO ${APP_ROLE}`)
+  await ddl.unsafe(`GRANT SELECT, INSERT ON ALL TABLES IN SCHEMA ${compiled.schema} TO ${APP_ROLE}`)
+  await ddl.end()
+
+  const noteTable = buildContentTable(note)
+  const ceApp = createTestDb(withCreds(smokeUrl, APP_ROLE, APP_PW))
+  await withTenant(ceApp.db, orgA.id, (tx) =>
+    tx.insert(noteTable).values({ organizationId: orgA.id, title: 'orgA note', body: 'hello' }),
+  )
+  const aNotes = (await withTenant(ceApp.db, orgA.id, (tx) => tx.select().from(noteTable))) as Array<{
+    title: string
+    status: string
+  }>
+  const bNotes = await withTenant(ceApp.db, orgB.id, (tx) => tx.select().from(noteTable))
+  check('content: orgA sees its row in the compiled table', aNotes.length === 1 && aNotes[0].title === 'orgA note')
+  check('content: generated table is RLS-isolated (orgB sees 0)', bNotes.length === 0)
+  check('content: row defaults to draft lifecycle status', aNotes[0].status === 'draft')
+  await ceApp.close()
 
   console.log(`\n${fail === 0 ? '✅ PASS' : '❌ FAIL'} — ${pass} passed, ${fail} failed`)
   process.exit(fail === 0 ? 0 : 1)
