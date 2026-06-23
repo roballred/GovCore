@@ -54,6 +54,8 @@ import {
   compileContentType,
   defineContentType,
   listLinkedIds,
+  recompute,
+  withComputed,
 } from '@govcore/content'
 
 const BASE = process.env.DATABASE_URL
@@ -392,11 +394,15 @@ async function main() {
       { name: 'primary_tag', type: 'reference', to: 'tag' }, // to-one
       { name: 'tags', type: 'link', to: 'tag' }, // to-many (junction)
     ],
+    computed: [
+      // materialized derived field, refreshed by recompute
+      { name: 'well_tagged', type: 'boolean', materialized: true, compute: (row) => Boolean(row.primary_tag_id) },
+    ],
   })
   const ddl = postgres(smokeUrl, { max: 1 })
   for (const def of [note, tag, article]) await ddl.unsafe(compileContentType(def).sql) // tag before article (FK)
   await ddl.unsafe(`GRANT USAGE ON SCHEMA content TO ${APP_ROLE}`)
-  await ddl.unsafe(`GRANT SELECT, INSERT, DELETE ON ALL TABLES IN SCHEMA content TO ${APP_ROLE}`)
+  await ddl.unsafe(`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA content TO ${APP_ROLE}`)
   await ddl.end()
 
   const noteTable = buildContentTable(note)
@@ -436,6 +442,14 @@ async function main() {
   check('content: link junction lists both targets (idempotent add)', linked.length === 2 && linked.includes(rel.t2.id))
   const linkedB = await withTenant(ceApp.db, orgB.id, (tx) => listLinkedIds(tx, articleTags, rel.art.id))
   check('content: link junction is RLS-isolated (orgB sees 0)', linkedB.length === 0)
+
+  // Rule 2: computed fields — materialized (recompute) + computed-on-read
+  await withTenant(ceApp.db, orgA.id, (tx) => recompute(tx, articleTable, article, rel.art.id))
+  const refreshed = (await withTenant(ceApp.db, orgA.id, (tx) =>
+    tx.select().from(articleTable).where(eq(articleTable.id, rel.art.id)),
+  )) as Array<{ well_tagged: boolean }>
+  check('content: recompute persisted the materialized computed column', refreshed[0].well_tagged === true)
+  check('content: withComputed derives the value on read', withComputed(article, refreshed[0]).well_tagged === true)
   await ceApp.close()
 
   console.log(`\n${fail === 0 ? '✅ PASS' : '❌ FAIL'} — ${pass} passed, ${fail} failed`)

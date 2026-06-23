@@ -8,11 +8,15 @@
 // Rule 2 (relationships): `reference` (to-one) FK columns and `link` (to-many)
 // junction tables, with `buildLinkTable` + add/remove/list link helpers.
 //
-// Not yet here: computed fields (Rule 2), per-type hooks (Rule 3), generated
-// actions/UI, taxonomy, and recipes — later slices.
+// Rule 2 (computed): derived fields via a pure `compute(row)` — computed-on-read
+// (`withComputed`) or materialized into a real column refreshed by `recompute`.
+//
+// Not yet here: per-type hooks (Rule 3), generated actions/UI, taxonomy, and
+// recipes — later slices.
 
 export * from './types'
 export * from './workflow'
 export * from './compile'
 export * from './table'
 export * from './relationships'
+export * from './computed'

@@ -129,6 +129,11 @@ export function compileContentType(
     }
   }
 
+  // Materialized computed fields get a real (nullable) column, refreshed by recompute.
+  for (const c of def.computed ?? []) {
+    if (c.materialized) columns.push(`  ${c.name} ${PG_TYPE[c.type]}`)
+  }
+
   const statusList = WORKFLOW_STATUSES.map((s) => `'${s}'`).join(', ')
   columns.push(`  status text NOT NULL DEFAULT '${DEFAULT_WORKFLOW_STATUS}'`)
   columns.push('  created_at timestamptz NOT NULL DEFAULT now()')

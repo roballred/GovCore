@@ -98,3 +98,20 @@ describe('compileContentType — relationships (Rule 2)', () => {
     expect(() => compileContentType(tagged)).toThrow(/not supported yet/)
   })
 })
+
+describe('compileContentType — computed fields', () => {
+  const doc = defineContentType({
+    name: 'doc',
+    fields: [{ name: 'title', type: 'text', required: true }],
+    computed: [
+      { name: 'completeness', type: 'number', materialized: true, compute: () => 0 },
+      { name: 'has_body', type: 'boolean', compute: () => false }, // on-read → no column
+    ],
+  })
+  const { sql } = compileContentType(doc)
+
+  it('emits a real column only for materialized computed fields', () => {
+    expect(sql).toContain('completeness numeric')
+    expect(sql).not.toContain('has_body')
+  })
+})
