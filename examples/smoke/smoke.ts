@@ -20,6 +20,16 @@ import {
   createTestUser,
   withTenant,
 } from '@govcore/testing'
+import {
+  approveBreakGlass,
+  getActiveActAsSession,
+  getUnlockedOrgIds,
+  grantBreakGlass,
+  requireActAs,
+  requireBreakGlass,
+  revokeBreakGlass,
+  startActAsSession,
+} from '@govcore/support'
 
 const BASE = process.env.DATABASE_URL
 if (!BASE) {
@@ -139,6 +149,51 @@ async function main() {
   check('RLS: orgB context sees only userB', bRows.length === 1 && bRows[0].id === userB.id, `(${bRows.length})`)
   check('RLS: no org context (deny by default) sees 0 users', noCtx === 0, `(${noCtx})`)
   await app.close()
+
+  // 9. support: break-glass + act-as lifecycle (instance-level; not RLS-bound)
+  console.log('• support: break-glass + act-as')
+  const sup = createTestDb(smokeUrl)
+  // 240m grant is over the approval threshold → needs a second admin
+  const bg = await grantBreakGlass(sup.db, {
+    instanceAdminId: userA.id,
+    targetOrgId: orgB.id,
+    reason: 'smoke: cross-tenant support',
+    ttlMinutes: 240,
+  })
+  check('break-glass grant >60m requires approval', bg.requiresApproval === true)
+  check('pre-approval: requireBreakGlass denies', (await requireBreakGlass(sup.db, userA.id, orgB.id)) === null)
+
+  let selfApproveBlocked = false
+  try {
+    await approveBreakGlass(sup.db, { sessionId: bg.id, approverId: userA.id })
+  } catch {
+    selfApproveBlocked = true
+  }
+  check('self-approval rejected', selfApproveBlocked)
+
+  await approveBreakGlass(sup.db, { sessionId: bg.id, approverId: userB.id })
+  const usable = await requireBreakGlass(sup.db, userA.id, orgB.id)
+  check('post-approval: requireBreakGlass grants', usable !== null && usable.id === bg.id)
+  check('getUnlockedOrgIds includes orgB', (await getUnlockedOrgIds(sup.db, userA.id)).has(orgB.id))
+
+  const aa = await startActAsSession(sup.db, { instanceAdminId: userA.id, targetOrgId: orgB.id }, orgA.id)
+  check('startActAsSession opens a session', aa !== null)
+  check('child act-as cannot outlive parent', !!aa && !!usable && aa.expiresAt <= usable.expiresAt)
+  check('requireActAs(orgB) resolves', !!aa && (await requireActAs(sup.db, aa.id, orgB.id)).id === aa.id)
+
+  let mismatchBlocked = false
+  try {
+    if (aa) await requireActAs(sup.db, aa.id, orgA.id)
+  } catch {
+    mismatchBlocked = true
+  }
+  check('requireActAs(wrong org) rejected', mismatchBlocked)
+
+  // revoking the parent self-terminates the child on next read (no background job)
+  await revokeBreakGlass(sup.db, { sessionId: bg.id, instanceAdminId: userA.id })
+  check('after parent revoke: act-as read ends + returns null', !!aa && (await getActiveActAsSession(sup.db, aa.id)) === null)
+  check('after parent revoke: requireBreakGlass denies', (await requireBreakGlass(sup.db, userA.id, orgB.id)) === null)
+  await sup.close()
 
   console.log(`\n${fail === 0 ? '✅ PASS' : '❌ FAIL'} — ${pass} passed, ${fail} failed`)
   process.exit(fail === 0 ? 0 : 1)

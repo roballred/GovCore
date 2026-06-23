@@ -11,6 +11,7 @@
     "@govcore/audit": "workspace:*",
     "@govcore/rbac": "workspace:*",
     "@govcore/schema": "workspace:*",
+    "@govcore/support": "workspace:*",
     "@govcore/tenancy": "workspace:*",
     "@govcore/testing": "workspace:*",
     "drizzle-orm": "^0.45.2",

@@ -105,6 +105,9 @@ importers:
       '@govcore/schema':
         specifier: workspace:*
         version: link:../../packages/schema
+      '@govcore/support':
+        specifier: workspace:*
+        version: link:../../packages/support
       '@govcore/tenancy':
         specifier: workspace:*
         version: link:../../packages/tenancy
@@ -229,6 +232,22 @@ importers:
         version: 5.9.3
 
   packages/server:
+    dependencies:
+      '@govcore/audit':
+        specifier: workspace:*
+        version: link:../audit
+      '@govcore/schema':
+        specifier: workspace:*
+        version: link:../schema
+      drizzle-orm:
+        specifier: ^0.45.2
+        version: 0.45.2(postgres@3.4.9)
+    devDependencies:
+      typescript:
+        specifier: ^5.5.0
+        version: 5.9.3
+
+  packages/support:
     dependencies:
       '@govcore/audit':
         specifier: workspace:*
