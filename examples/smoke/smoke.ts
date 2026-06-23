@@ -53,11 +53,13 @@ import {
   buildLinkTable,
   compileContentType,
   defineContentType,
+  generateContentActions,
   listLinkedIds,
   publish,
   recompute,
   withComputed,
 } from '@govcore/content'
+import { createTenantActions } from '@govcore/server'
 
 const BASE = process.env.DATABASE_URL
 if (!BASE) {
@@ -479,6 +481,26 @@ async function main() {
     tx.select().from(articleTable).where(eq(articleTable.id, rel.art.id)),
   )) as Array<{ status: string }>
   check('content: published status persisted', persisted[0].status === 'published')
+
+  // generated CRUD as tenantActions: org from context, RLS, materialized, lifecycle
+  const tenantAction = createTenantActions({
+    db: ceApp.db,
+    getActiveContext: async () => ({ userId: userA.id, organizationId: orgA.id, role: 'admin' }),
+  })
+  const articleActions = generateContentActions(tenantAction, article, articleTable)
+  const created = (await articleActions.create({ title: 'Via action', primary_tag_id: t1.id })) as {
+    id: string
+    title: string
+    organizationId: string
+    well_tagged: boolean
+  }
+  check('content/action: create scopes org from context, applies materialized', created.organizationId === orgA.id && created.well_tagged === true)
+  const listedIds = ((await articleActions.list()) as Array<{ id: string }>).map((r) => r.id)
+  check('content/action: list is RLS-scoped and includes the new row', listedIds.includes(created.id))
+  const pub = (await articleActions.publish({ id: created.id })) as { status: string }
+  check('content/action: publish runs the lifecycle gate + hook', pub.status === 'published')
+  const got = (await articleActions.get({ id: created.id })) as { status: string }
+  check('content/action: get returns the published row', got.status === 'published')
   await ceApp.close()
 
   console.log(`\n${fail === 0 ? '✅ PASS' : '❌ FAIL'} — ${pass} passed, ${fail} failed`)
