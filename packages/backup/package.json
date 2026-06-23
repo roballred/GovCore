@@ -1,0 +1,24 @@
+{
+  "name": "@govcore/backup",
+  "version": "0.0.0",
+  "description": "Registration-based whole-tenant export/restore to JSON",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch"
+  },
+  "publishConfig": { "access": "public" },
+  "dependencies": {
+    "@govcore/schema": "workspace:*",
+    "drizzle-orm": "^0.45.2"
+  },
+  "devDependencies": { "typescript": "^5.5.0" }
+}
