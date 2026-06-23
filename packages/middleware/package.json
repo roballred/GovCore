@@ -1,6 +1,6 @@
 {
   "name": "@govcore/middleware",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Edge-safe Next.js middleware factory: read-only session decode, resurrection guard, instance/maintenance gating",
   "type": "module",
   "main": "./src/index.ts",
@@ -15,7 +15,9 @@
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch"
   },
-  "publishConfig": { "access": "public" },
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "@govcore/auth": "workspace:*",
     "next-auth": "^5.0.0-beta.25"

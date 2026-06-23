@@ -1,0 +1,51 @@
+name: Release
+
+# Changesets release automation for the public npm @govcore scope.
+#
+# DORMANT BY DEFAULT. The job is skipped unless the repo variable
+# `NPM_PUBLISH` is set to `true`. To turn publishing on ("one click later"):
+#   1. add an `NPM_TOKEN` secret with publish rights to the @govcore scope, and
+#   2. set repository variable `NPM_PUBLISH=true`.
+# Until both are in place nothing is published, so a merge to main can't release
+# by accident.
+#
+# Once enabled, on every push to main the changesets action either:
+#   - opens/updates a "Version Packages" PR when changesets are pending, or
+#   - runs `changeset publish` when versioned releases are ready.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency: release-${{ github.ref }}
+
+jobs:
+  release:
+    if: ${{ vars.NPM_PUBLISH == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          registry-url: 'https://registry.npmjs.org'
+      - run: pnpm install --frozen-lockfile
+      # Compile dist/ (bins + types) before publishing the packages.
+      - run: pnpm build --filter='./packages/*'
+      - uses: changesets/action@v1
+        with:
+          version: pnpm changeset version
+          publish: pnpm changeset publish
+          commit: 'chore: version packages'
+          title: 'chore: version packages'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
