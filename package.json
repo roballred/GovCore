@@ -5,7 +5,8 @@
     "dev": "turbo dev",
     "build": "turbo build",
     "lint": "turbo lint",
-    "test": "turbo test",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release": "changeset publish",
@@ -15,7 +16,8 @@
     "@changesets/cli": "^2.27.0",
     "@types/node": "^22.0.0",
     "turbo": "^2.0.0",
-    "typescript": "^5.5.0"
+    "typescript": "^5.5.0",
+    "vitest": "^2.1.9"
   },
   "engines": {
     "node": ">=20",
