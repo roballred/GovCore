@@ -99,6 +99,9 @@ importers:
       '@govcore/audit':
         specifier: workspace:*
         version: link:../../packages/audit
+      '@govcore/federation':
+        specifier: workspace:*
+        version: link:../../packages/federation
       '@govcore/rbac':
         specifier: workspace:*
         version: link:../../packages/rbac
@@ -180,6 +183,22 @@ importers:
       react:
         specifier: ^19.0.0
         version: 19.2.7
+      typescript:
+        specifier: ^5.5.0
+        version: 5.9.3
+
+  packages/federation:
+    dependencies:
+      '@govcore/audit':
+        specifier: workspace:*
+        version: link:../audit
+      '@govcore/schema':
+        specifier: workspace:*
+        version: link:../schema
+      drizzle-orm:
+        specifier: ^0.45.2
+        version: 0.45.2(postgres@3.4.9)
+    devDependencies:
       typescript:
         specifier: ^5.5.0
         version: 5.9.3

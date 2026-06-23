@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@govcore/audit": "workspace:*",
+    "@govcore/federation": "workspace:*",
     "@govcore/rbac": "workspace:*",
     "@govcore/schema": "workspace:*",
     "@govcore/support": "workspace:*",
