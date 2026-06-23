@@ -488,7 +488,7 @@ async function main() {
     getActiveContext: async () => ({ userId: userA.id, organizationId: orgA.id, role: 'admin' }),
   })
   const articleActions = generateContentActions(tenantAction, article, articleTable)
-  const created = (await articleActions.create({ title: 'Via action', primary_tag_id: t1.id })) as {
+  const created = (await articleActions.create({ title: 'Via action', primary_tag_id: rel.t1.id })) as {
     id: string
     title: string
     organizationId: string
