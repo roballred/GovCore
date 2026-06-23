@@ -15,11 +15,13 @@ It is a **standalone initiative**, separate from [GovEA](https://github.com/roba
 
 GovCore was seeded from GovEA `main` (commit `19b4bdf`) and the **GovEA-specific seed has now been stripped** — no `apps/govea`, no `@govea/core`, no `business-architecture/`, `Standards.md`, GovEA docs, scripts, docker, or CI. What remains is a clean, packages-only monorepo: the `@govcore/*` packages, the design doc, and tooling.
 
-**Implemented so far:** `@govcore/rbac` (generic `createRbac`) and `@govcore/schema` (platform tables in the `govcore` Postgres schema + migrations + `govcore-migrate` + RLS). The other packages (`audit`, `tenancy`, `auth`, `middleware`, `federation`, `support`, `backup`, `theme`, `server`, `nextkit`, `content`) are skeletons or not yet created — see `packages/README.md`.
+**Implemented:** `@govcore/rbac` (generic `createRbac`), `@govcore/schema` (platform tables in the `govcore` Postgres schema + migrations + `govcore-migrate` + RLS), `audit`, `tenancy`, `auth`, `middleware`, `server`, `theme` (WCAG-AA base theme), `nextkit` (reusable instance-console React), `support` (break-glass + act-as), `federation` (org connections + visibility), and `backup` (registration-based whole-tenant export/restore). The `content` engine is the second milestone and is not yet created — see `packages/README.md`.
 
-**Extraction source for later phases:** the platform code still to be ported (auth, middleware, federation, support, backup, theme) lives in the **sibling GovEA repo at `/Users/robbot/Repos/Claude/govea-app`** (read-only — never modify it). Read `apps/govea/src/lib/*` there as the source when implementing Phases 2–4.
+**Deferred / out of scope:** federation **cross-org content links** (app-defined link semantics) are not yet extracted; backup **cross-org UUID remapping** is out of scope — backup supports same-org restore only.
 
-**Verification:** nothing is built here yet (no `node_modules`); typecheck and migrations run after `pnpm install` / in CI. There is no test harness yet — package-level tests and an `examples/` consumer are still to come.
+**Extraction source for the content engine:** the remaining platform code still to be ported lives in the **sibling GovEA repo at `/Users/robbot/Repos/Claude/govea-app`** (read-only — never modify it). Read `apps/govea/src/lib/*` there as the source.
+
+**Verification:** there is a test harness. **Vitest** unit suites (pure logic — password, theme, support, federation visibility, backup registry/import, the #782 resurrection guard, etc.) run locally. **`examples/smoke`** runs a DB-backed integration round-trip — migrate, rbac/tenancy/audit, the audit-immutability trigger, RLS tenant isolation under a non-owner role, the support lifecycle, federation connections, and a backup round-trip — against Postgres in CI (`.github/workflows/ci.yml`). There is no local Postgres, so the DB-backed smoke runs in CI; unit suites run anywhere after `pnpm install`.
 
 ## Locked Decisions (summary — full detail in the design doc)
 
