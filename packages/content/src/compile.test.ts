@@ -56,12 +56,45 @@ describe('compileContentType', () => {
     const { sql: s2 } = compileContentType(note, { schema: 'app_content' })
     expect(s2).toContain('CREATE TABLE IF NOT EXISTS app_content.note (')
   })
+})
 
-  it('rejects relationship field types (deferred to Rule 2)', () => {
-    const cap = defineContentType({
-      name: 'capability',
-      fields: [{ name: 'owner', type: 'reference', to: 'person' }],
+describe('compileContentType — relationships (Rule 2)', () => {
+  const capability = defineContentType({
+    name: 'capability',
+    fields: [
+      { name: 'name', type: 'text', required: true },
+      { name: 'owner', type: 'reference', to: 'person' }, // optional → SET NULL
+      { name: 'domain', type: 'reference', to: 'domain', required: true }, // → RESTRICT
+      { name: 'applications', type: 'link', to: 'application' },
+    ],
+  })
+  const compiled = compileContentType(capability)
+
+  it('emits a reference as a <name>_id FK column with the right ON DELETE', () => {
+    expect(compiled.sql).toContain('owner_id uuid REFERENCES content.person (id) ON DELETE SET NULL')
+    expect(compiled.sql).toContain(
+      'domain_id uuid NOT NULL REFERENCES content.domain (id) ON DELETE RESTRICT',
+    )
+    expect(compiled.sql).toContain(
+      'CREATE INDEX IF NOT EXISTS capability_owner_id_idx ON content.capability (owner_id)',
+    )
+  })
+
+  it('generates a junction table for a link field (org-scoped + RLS)', () => {
+    expect(compiled.junctions).toEqual([{ field: 'applications', tableName: 'capability__applications' }])
+    expect(compiled.sql).toContain('CREATE TABLE IF NOT EXISTS content.capability__applications (')
+    expect(compiled.sql).toContain('source_id uuid NOT NULL REFERENCES content.capability (id) ON DELETE CASCADE')
+    expect(compiled.sql).toContain('target_id uuid NOT NULL REFERENCES content.application (id) ON DELETE CASCADE')
+    expect(compiled.sql).toContain('PRIMARY KEY (source_id, target_id)')
+    expect(compiled.sql).toContain('ALTER TABLE content.capability__applications FORCE ROW LEVEL SECURITY;')
+    expect(compiled.sql).toContain('CREATE POLICY capability__applications_org_isolation')
+  })
+
+  it('still rejects a taxonomy field (later slice)', () => {
+    const tagged = defineContentType({
+      name: 'doc',
+      fields: [{ name: 'area', type: 'taxonomy', tree: 'domains' }],
     })
-    expect(() => compileContentType(cap)).toThrow(/relationship — not supported yet/)
+    expect(() => compileContentType(tagged)).toThrow(/not supported yet/)
   })
 })

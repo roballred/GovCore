@@ -47,7 +47,14 @@ import {
   revokeCrossOrgLink,
 } from '@govcore/federation'
 import { cloneOrgInto, exportOrg, importOrg, registerBackupTables } from '@govcore/backup'
-import { buildContentTable, compileContentType, defineContentType } from '@govcore/content'
+import {
+  addLink,
+  buildContentTable,
+  buildLinkTable,
+  compileContentType,
+  defineContentType,
+  listLinkedIds,
+} from '@govcore/content'
 
 const BASE = process.env.DATABASE_URL
 if (!BASE) {
@@ -367,8 +374,8 @@ async function main() {
   check('removeLinksForConnection cleared remaining links', removed.length === 1 && (await getCrossOrgLinks(lk.db, orgA.id)).length === 0)
   await lk.close()
 
-  // 13. content engine: compile a type → a real table that RLS isolates like any other
-  console.log('• content engine: compile + RLS on a generated table')
+  // 13. content engine: compile types → real RLS-bound tables, with relationships
+  console.log('• content engine: compile + RLS + relationships')
   const note = defineContentType({
     name: 'note',
     label: 'Note',
@@ -377,16 +384,28 @@ async function main() {
       { name: 'body', type: 'textarea' },
     ],
   })
-  const compiled = compileContentType(note)
+  const tag = defineContentType({ name: 'tag', fields: [{ name: 'name', type: 'text', required: true }] })
+  const article = defineContentType({
+    name: 'article',
+    fields: [
+      { name: 'title', type: 'text', required: true },
+      { name: 'primary_tag', type: 'reference', to: 'tag' }, // to-one
+      { name: 'tags', type: 'link', to: 'tag' }, // to-many (junction)
+    ],
+  })
   const ddl = postgres(smokeUrl, { max: 1 })
-  await ddl.unsafe(compiled.sql) // apply the generated migration
-  // the generated table lives in its own schema; grant the non-owner runtime role
-  await ddl.unsafe(`GRANT USAGE ON SCHEMA ${compiled.schema} TO ${APP_ROLE}`)
-  await ddl.unsafe(`GRANT SELECT, INSERT ON ALL TABLES IN SCHEMA ${compiled.schema} TO ${APP_ROLE}`)
+  for (const def of [note, tag, article]) await ddl.unsafe(compileContentType(def).sql) // tag before article (FK)
+  await ddl.unsafe(`GRANT USAGE ON SCHEMA content TO ${APP_ROLE}`)
+  await ddl.unsafe(`GRANT SELECT, INSERT, DELETE ON ALL TABLES IN SCHEMA content TO ${APP_ROLE}`)
   await ddl.end()
 
   const noteTable = buildContentTable(note)
+  const tagTable = buildContentTable(tag)
+  const articleTable = buildContentTable(article)
+  const articleTags = buildLinkTable(article, 'tags')
   const ceApp = createTestDb(withCreds(smokeUrl, APP_ROLE, APP_PW))
+
+  // Rule 1: a generated table is RLS-isolated like any hand-written one
   await withTenant(ceApp.db, orgA.id, (tx) =>
     tx.insert(noteTable).values({ organizationId: orgA.id, title: 'orgA note', body: 'hello' }),
   )
@@ -398,6 +417,25 @@ async function main() {
   check('content: orgA sees its row in the compiled table', aNotes.length === 1 && aNotes[0].title === 'orgA note')
   check('content: generated table is RLS-isolated (orgB sees 0)', bNotes.length === 0)
   check('content: row defaults to draft lifecycle status', aNotes[0].status === 'draft')
+
+  // Rule 2: reference (to-one FK) + link (to-many junction)
+  const rel = await withTenant(ceApp.db, orgA.id, async (tx) => {
+    const [t1] = await tx.insert(tagTable).values({ organizationId: orgA.id, name: 'arch' }).returning()
+    const [t2] = await tx.insert(tagTable).values({ organizationId: orgA.id, name: 'security' }).returning()
+    const [art] = await tx
+      .insert(articleTable)
+      .values({ organizationId: orgA.id, title: 'Doc', primaryTagId: t1.id })
+      .returning()
+    await addLink(tx, articleTags, { sourceId: art.id, targetId: t1.id, organizationId: orgA.id })
+    await addLink(tx, articleTags, { sourceId: art.id, targetId: t2.id, organizationId: orgA.id })
+    await addLink(tx, articleTags, { sourceId: art.id, targetId: t1.id, organizationId: orgA.id }) // idempotent
+    return { t1, t2, art }
+  })
+  check('content: reference persisted the to-one FK', (rel.art as { primaryTagId: string }).primaryTagId === rel.t1.id)
+  const linked = await withTenant(ceApp.db, orgA.id, (tx) => listLinkedIds(tx, articleTags, rel.art.id))
+  check('content: link junction lists both targets (idempotent add)', linked.length === 2 && linked.includes(rel.t2.id))
+  const linkedB = await withTenant(ceApp.db, orgB.id, (tx) => listLinkedIds(tx, articleTags, rel.art.id))
+  check('content: link junction is RLS-isolated (orgB sees 0)', linkedB.length === 0)
   await ceApp.close()
 
   console.log(`\n${fail === 0 ? '✅ PASS' : '❌ FAIL'} — ${pass} passed, ${fail} failed`)
