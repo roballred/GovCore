@@ -52,6 +52,8 @@ export interface ContentTypeDefinition {
   label?: string
   fields: FieldDefinition[]
   computed?: ComputedFieldDefinition[]
+  /** Per-type hooks (Rule 3) — the escape hatch to real code. */
+  hooks?: import('./hooks').ContentHooks
 }
 
 /** Columns the engine owns on every compiled table; field names may not collide. */
