@@ -8,8 +8,9 @@
 //     pnpm --filter @govcore/example-smoke smoke
 
 import postgres from 'postgres'
+import { eq } from 'drizzle-orm'
 import { migrate } from '@govcore/schema/migrate'
-import { users } from '@govcore/schema'
+import { users, userOrganizationMemberships } from '@govcore/schema'
 import { createRbac } from '@govcore/rbac'
 import { activeMembershipCountByRole, resolveActiveMembership } from '@govcore/tenancy'
 import { listAuditForOrg, writeAuditLog } from '@govcore/audit'
@@ -30,6 +31,13 @@ import {
   revokeBreakGlass,
   startActAsSession,
 } from '@govcore/support'
+import {
+  acceptConnection,
+  canReadFederatedEntity,
+  getConnectedOrgIds,
+  requestConnection,
+} from '@govcore/federation'
+import { exportOrg, importOrg, registerBackupTables } from '@govcore/backup'
 
 const BASE = process.env.DATABASE_URL
 if (!BASE) {
@@ -194,6 +202,74 @@ async function main() {
   check('after parent revoke: act-as read ends + returns null', !!aa && (await getActiveActAsSession(sup.db, aa.id)) === null)
   check('after parent revoke: requireBreakGlass denies', (await requireBreakGlass(sup.db, userA.id, orgB.id)) === null)
   await sup.close()
+
+  // 10. federation: org connections + federated visibility
+  console.log('• federation: connections + visibility')
+  const fed = createTestDb(smokeUrl)
+  const conn = await requestConnection(fed.db, {
+    orgId: orgA.id,
+    targetOrgId: orgB.id,
+    actorUserId: userA.id,
+  })
+  check('requestConnection opens pending', conn.status === 'pending')
+  check('pending connection is not yet active', (await getConnectedOrgIds(fed.db, orgA.id)).length === 0)
+
+  let dupBlocked = false
+  try {
+    await requestConnection(fed.db, { orgId: orgA.id, targetOrgId: orgB.id, actorUserId: userA.id })
+  } catch {
+    dupBlocked = true
+  }
+  check('duplicate connection request rejected', dupBlocked)
+
+  let wrongAcceptBlocked = false
+  try {
+    await acceptConnection(fed.db, { connectionId: conn.id, orgId: orgA.id, actorUserId: userA.id })
+  } catch {
+    wrongAcceptBlocked = true
+  }
+  check('non-target org cannot accept', wrongAcceptBlocked)
+
+  await acceptConnection(fed.db, { connectionId: conn.id, orgId: orgB.id, actorUserId: userB.id })
+  check('after accept: orgA sees orgB connected', (await getConnectedOrgIds(fed.db, orgA.id)).includes(orgB.id))
+  check('after accept: orgB sees orgA connected (bilateral)', (await getConnectedOrgIds(fed.db, orgB.id)).includes(orgA.id))
+  check('can read connections-visibility across an active connection', (await canReadFederatedEntity(fed.db, orgB.id, 'connections', orgA.id)) === true)
+  check('cannot read org-visibility across a connection', (await canReadFederatedEntity(fed.db, orgB.id, 'org', orgA.id)) === false)
+  check('can read instance-visibility regardless', (await canReadFederatedEntity(fed.db, orgB.id, 'instance', orgA.id)) === true)
+  await fed.close()
+
+  // 11. backup: export → drift → destructive same-org restore round-trip.
+  // Registers a real org-scoped platform table (memberships) as the app would.
+  console.log('• backup: export / restore round-trip')
+  const bk = createTestDb(smokeUrl)
+  const registry = registerBackupTables([
+    {
+      name: 'memberships',
+      table: userOrganizationMemberships,
+      orgColumn: userOrganizationMemberships.organizationId,
+      category: 'content',
+    },
+  ])
+  const orgAMemberships = () =>
+    bk.db.select().from(userOrganizationMemberships).where(eq(userOrganizationMemberships.organizationId, orgA.id))
+
+  const bundle = await exportOrg(bk.db, registry, orgA.id, 'archive')
+  check('export captures orgA membership', (bundle.data.memberships as unknown[]).length === 1)
+
+  // drift: orgA gains a membership that is NOT in the bundle
+  await addMembership(bk.db, { userId: userB.id, organizationId: orgA.id, role: 'viewer' })
+  check('drift: orgA now has 2 memberships', (await orgAMemberships()).length === 2)
+
+  const res = await importOrg(bk.db, registry, bundle, { targetOrgId: orgA.id })
+  check('restore wiped the drifted rows', res.deleted.memberships === 2)
+  check('restore reinserted the bundle rows', res.inserted.memberships === 1)
+
+  const restored = await orgAMemberships()
+  check(
+    'orgA restored to exactly the exported membership (UUID + user preserved)',
+    restored.length === 1 && restored[0].userId === userA.id && restored[0].id === (bundle.data.memberships as Array<{ id: string }>)[0].id,
+  )
+  await bk.close()
 
   console.log(`\n${fail === 0 ? '✅ PASS' : '❌ FAIL'} — ${pass} passed, ${fail} failed`)
   process.exit(fail === 0 ? 0 : 1)
