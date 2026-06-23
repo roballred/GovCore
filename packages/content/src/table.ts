@@ -57,8 +57,9 @@ export function buildContentTable(def: ContentTypeDefinition, opts: { schema?: s
     if (isScalarField(f)) {
       columns[f.name] = scalarBuilder(f.name, f.type, f.required)
     } else if (isReferenceField(f)) {
+      // JS key mirrors the column name (snake_case), like scalar fields.
       const col = uuid(`${f.name}_id`)
-      columns[`${f.name}Id`] = f.required ? col.notNull() : col
+      columns[`${f.name}_id`] = f.required ? col.notNull() : col
     } else if (isLinkField(f)) {
       continue // to-many lives in a junction table
     } else {

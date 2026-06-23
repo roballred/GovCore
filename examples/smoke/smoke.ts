@@ -424,14 +424,14 @@ async function main() {
     const [t2] = await tx.insert(tagTable).values({ organizationId: orgA.id, name: 'security' }).returning()
     const [art] = await tx
       .insert(articleTable)
-      .values({ organizationId: orgA.id, title: 'Doc', primaryTagId: t1.id })
+      .values({ organizationId: orgA.id, title: 'Doc', primary_tag_id: t1.id })
       .returning()
     await addLink(tx, articleTags, { sourceId: art.id, targetId: t1.id, organizationId: orgA.id })
     await addLink(tx, articleTags, { sourceId: art.id, targetId: t2.id, organizationId: orgA.id })
     await addLink(tx, articleTags, { sourceId: art.id, targetId: t1.id, organizationId: orgA.id }) // idempotent
     return { t1, t2, art }
   })
-  check('content: reference persisted the to-one FK', (rel.art as { primaryTagId: string }).primaryTagId === rel.t1.id)
+  check('content: reference persisted the to-one FK', (rel.art as { primary_tag_id: string }).primary_tag_id === rel.t1.id)
   const linked = await withTenant(ceApp.db, orgA.id, (tx) => listLinkedIds(tx, articleTags, rel.art.id))
   check('content: link junction lists both targets (idempotent add)', linked.length === 2 && linked.includes(rel.t2.id))
   const linkedB = await withTenant(ceApp.db, orgB.id, (tx) => listLinkedIds(tx, articleTags, rel.art.id))
