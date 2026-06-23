@@ -46,7 +46,7 @@ import {
   requestConnection,
   revokeCrossOrgLink,
 } from '@govcore/federation'
-import { exportOrg, importOrg, registerBackupTables } from '@govcore/backup'
+import { cloneOrgInto, exportOrg, importOrg, registerBackupTables } from '@govcore/backup'
 
 const BASE = process.env.DATABASE_URL
 if (!BASE) {
@@ -278,6 +278,24 @@ async function main() {
     'orgA restored to exactly the exported membership (UUID + user preserved)',
     restored.length === 1 && restored[0].userId === userA.id && restored[0].id === (bundle.data.memberships as Array<{ id: string }>)[0].id,
   )
+
+  // cross-org clone: copy orgA's membership into a fresh org with a regenerated id
+  const orgC = await createTestOrg(bk.db, { slug: 'org-c' })
+  const sourceMembershipId = (bundle.data.memberships as Array<{ id: string }>)[0].id
+  const clone = await cloneOrgInto(bk.db, registry, bundle, { targetOrgId: orgC.id })
+  check('clone inserted the membership into orgC', clone.inserted.memberships === 1)
+  const orgCMemberships = await bk.db
+    .select()
+    .from(userOrganizationMemberships)
+    .where(eq(userOrganizationMemberships.organizationId, orgC.id))
+  check(
+    'clone has a NEW id, org=orgC, same user',
+    orgCMemberships.length === 1 &&
+      orgCMemberships[0].userId === userA.id &&
+      orgCMemberships[0].id !== sourceMembershipId &&
+      orgCMemberships[0].id === clone.idMap.memberships[sourceMembershipId],
+  )
+  check('source org membership still intact (clone is additive)', (await orgAMemberships()).length === 1)
   await bk.close()
 
   // 12. federation cross-org content links (entity ids carry no FK — app-defined)
