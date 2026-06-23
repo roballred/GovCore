@@ -24,7 +24,9 @@ jobs:
           node-version: 20
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm build
+      # Typecheck the publishable packages only. Example apps (next build) need
+      # runtime env/DB and are exercised by the integration job instead.
+      - run: pnpm build --filter='./packages/*'
       - run: pnpm test
 
   integration:
