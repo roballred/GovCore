@@ -11,6 +11,13 @@ import type { AnyPgColumn, PgTable } from 'drizzle-orm/pg-core'
 
 export type BackupCategory = 'config' | 'content'
 
+export interface BackupReference {
+  /** Row field holding a foreign-key id. */
+  field: string
+  /** Name of the registered table that id points to. */
+  table: string
+}
+
 export interface BackupTable {
   /** Stable key under which this table's rows live in the bundle. */
   name: string
@@ -20,6 +27,15 @@ export interface BackupTable {
   orgColumn: AnyPgColumn
   /** Row property holding the org id, remapped on import. Defaults to `organizationId`. */
   orgField?: string
+  /** Primary-key row field, regenerated on cross-org clone. Defaults to `id`. */
+  pkField?: string
+  /**
+   * Foreign-key fields that point to *other registered tables*, used only by
+   * cross-org clone to remap references to the cloned rows' new ids. Fields
+   * pointing outside the bundle (e.g. `createdBy` → users) are not declared
+   * here — handle those via `forceFields`.
+   */
+  references?: BackupReference[]
   /** recipe (config) vs content classification. Defaults to `content`. */
   category?: BackupCategory
 }
