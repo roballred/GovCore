@@ -7,6 +7,7 @@
 //   DATABASE_URL=postgresql://user:pass@localhost:5432/postgres \
 //     pnpm --filter @govcore/example-smoke smoke
 
+import { randomUUID } from 'node:crypto'
 import postgres from 'postgres'
 import { eq } from 'drizzle-orm'
 import { migrate } from '@govcore/schema/migrate'
@@ -33,9 +34,17 @@ import {
 } from '@govcore/support'
 import {
   acceptConnection,
+  approveCrossOrgLink,
   canReadFederatedEntity,
+  clearLinksFlag,
+  flagLinksForVisibilityDrop,
   getConnectedOrgIds,
+  getCrossOrgLinks,
+  getLinksForEntity,
+  removeLinksForConnection,
+  requestCrossOrgLink,
   requestConnection,
+  revokeCrossOrgLink,
 } from '@govcore/federation'
 import { exportOrg, importOrg, registerBackupTables } from '@govcore/backup'
 
@@ -270,6 +279,74 @@ async function main() {
     restored.length === 1 && restored[0].userId === userA.id && restored[0].id === (bundle.data.memberships as Array<{ id: string }>)[0].id,
   )
   await bk.close()
+
+  // 12. federation cross-org content links (entity ids carry no FK — app-defined)
+  console.log('• federation: cross-org content links')
+  const lk = createTestDb(smokeUrl)
+  const srcId = randomUUID()
+  const tgtId = randomUUID()
+  const endpoints = {
+    sourceEntityType: 'doc',
+    sourceEntityId: srcId,
+    targetEntityType: 'doc',
+    targetEntityId: tgtId,
+  }
+  const link = await requestCrossOrgLink(lk.db, {
+    sourceOrgId: orgA.id,
+    targetOrgId: orgB.id,
+    linkType: 'references',
+    actorUserId: userA.id,
+    ...endpoints,
+  })
+  check('requestCrossOrgLink opens pending', link.status === 'pending')
+
+  let dupLinkBlocked = false
+  try {
+    await requestCrossOrgLink(lk.db, {
+      sourceOrgId: orgA.id,
+      targetOrgId: orgB.id,
+      linkType: 'references',
+      actorUserId: userA.id,
+      ...endpoints,
+    })
+  } catch {
+    dupLinkBlocked = true
+  }
+  check('duplicate link request rejected', dupLinkBlocked)
+
+  let wrongLinkApprove = false
+  try {
+    await approveCrossOrgLink(lk.db, { linkId: link.id, orgId: orgA.id, actorUserId: userA.id })
+  } catch {
+    wrongLinkApprove = true
+  }
+  check('non-target org cannot approve a link', wrongLinkApprove)
+
+  await approveCrossOrgLink(lk.db, { linkId: link.id, orgId: orgB.id, actorUserId: userB.id })
+  check('orgA sees the active link', (await getCrossOrgLinks(lk.db, orgA.id)).some((l) => l.id === link.id && l.status === 'active'))
+
+  await flagLinksForVisibilityDrop(lk.db, 'doc', srcId, 'visibility dropped to org')
+  check('link flagged for review on visibility drop', (await getLinksForEntity(lk.db, 'doc', srcId))[0].flaggedForReview === true)
+  await clearLinksFlag(lk.db, 'doc', srcId)
+  check('link flag cleared when visibility restored', (await getLinksForEntity(lk.db, 'doc', srcId))[0].flaggedForReview === false)
+
+  await revokeCrossOrgLink(lk.db, { linkId: link.id, orgId: orgB.id, actorUserId: userB.id })
+  check('revoked link is removed', (await getLinksForEntity(lk.db, 'doc', srcId)).length === 0)
+
+  // removeLinksForConnection clears anything remaining between the two orgs
+  await requestCrossOrgLink(lk.db, {
+    sourceOrgId: orgA.id,
+    targetOrgId: orgB.id,
+    linkType: 'references',
+    actorUserId: userA.id,
+    sourceEntityType: 'doc',
+    sourceEntityId: randomUUID(),
+    targetEntityType: 'doc',
+    targetEntityId: randomUUID(),
+  })
+  const removed = await removeLinksForConnection(lk.db, orgA.id, orgB.id, userA.id, orgA.id)
+  check('removeLinksForConnection cleared remaining links', removed.length === 1 && (await getCrossOrgLinks(lk.db, orgA.id)).length === 0)
+  await lk.close()
 
   console.log(`\n${fail === 0 ? '✅ PASS' : '❌ FAIL'} — ${pass} passed, ${fail} failed`)
   process.exit(fail === 0 ? 0 : 1)
