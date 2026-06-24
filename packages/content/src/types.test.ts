@@ -50,9 +50,21 @@ describe('defineContentType', () => {
     ).toThrow(/unknown type/)
   })
 
-  it('accepts relationship field types in the vocabulary (compiler rejects them later)', () => {
+  it('accepts reference/link fields that name a target', () => {
     expect(() =>
       defineContentType({ name: 'cap', fields: [{ name: 'owner', type: 'reference', to: 'person' }] }),
     ).not.toThrow()
+    expect(() =>
+      defineContentType({ name: 'cap', fields: [{ name: 'apps', type: 'link', to: 'application' }] }),
+    ).not.toThrow()
+  })
+
+  it('requires a snake_case "to" on reference/link fields', () => {
+    expect(() =>
+      defineContentType({ name: 'cap', fields: [{ name: 'owner', type: 'reference' }] }),
+    ).toThrow(/needs a snake_case "to"/)
+    expect(() =>
+      defineContentType({ name: 'cap', fields: [{ name: 'apps', type: 'link', to: 'Application' }] }),
+    ).toThrow(/needs a snake_case "to"/)
   })
 })

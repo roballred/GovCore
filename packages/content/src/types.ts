@@ -11,8 +11,11 @@
 export const SCALAR_FIELD_TYPES = ['text', 'textarea', 'number', 'boolean', 'date'] as const
 export type ScalarFieldType = (typeof SCALAR_FIELD_TYPES)[number]
 
-/** Relationship field types — declared in the vocabulary, implemented in Rule 2. */
-export const RELATIONSHIP_FIELD_TYPES = ['reference', 'taxonomy'] as const
+/**
+ * Relationship field types. `reference` (to-one) and `link` (to-many through a
+ * generated junction) are implemented; `taxonomy` is a later slice.
+ */
+export const RELATIONSHIP_FIELD_TYPES = ['reference', 'link', 'taxonomy'] as const
 export type RelationshipFieldType = (typeof RELATIONSHIP_FIELD_TYPES)[number]
 
 export type FieldType = ScalarFieldType | RelationshipFieldType
@@ -22,8 +25,9 @@ export interface FieldDefinition {
   type: FieldType
   required?: boolean
   label?: string
-  /** For `reference`/`taxonomy` — the target type/tree. Unused until Rule 2. */
+  /** For `reference`/`link` — the target content type's name. Required for those. */
   to?: string
+  /** For `taxonomy` — the tree name. Unused until the taxonomy slice. */
   tree?: string
 }
 
@@ -77,10 +81,23 @@ export function defineContentType(def: ContentTypeDefinition): ContentTypeDefini
     if (!ALL_FIELD_TYPES.includes(f.type)) {
       throw new Error(`defineContentType("${def.name}"): field "${f.name}" has unknown type "${f.type}"`)
     }
+    if ((f.type === 'reference' || f.type === 'link') && !IDENTIFIER.test(f.to ?? '')) {
+      throw new Error(
+        `defineContentType("${def.name}"): ${f.type} field "${f.name}" needs a snake_case "to" (target content type)`,
+      )
+    }
   }
   return def
 }
 
 export function isScalarField(f: FieldDefinition): f is FieldDefinition & { type: ScalarFieldType } {
   return (SCALAR_FIELD_TYPES as readonly string[]).includes(f.type)
+}
+
+export function isReferenceField(f: FieldDefinition): f is FieldDefinition & { to: string } {
+  return f.type === 'reference'
+}
+
+export function isLinkField(f: FieldDefinition): f is FieldDefinition & { to: string } {
+  return f.type === 'link'
 }
