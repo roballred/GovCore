@@ -66,6 +66,7 @@ import {
 } from '@govcore/content'
 import { contentColumns } from '@govcore/content/screens'
 import { createTenantActions } from '@govcore/server'
+import { application, capability, capabilityCompleteness, person } from './capability'
 
 const BASE = process.env.DATABASE_URL
 if (!BASE) {
@@ -419,7 +420,9 @@ async function main() {
   })
   const ddl = postgres(smokeUrl, { max: 1 })
   await ddl.unsafe(taxonomySchemaDdl()) // engine-owned taxonomy_nodes — article.domain FKs into it
-  for (const def of [note, tag, article]) await ddl.unsafe(compileContentType(def).sql) // tag before article (FK)
+  // person/application before capability (FK targets); capability before its own junctions
+  for (const def of [note, tag, article, person, application, capability])
+    await ddl.unsafe(compileContentType(def).sql)
   await ddl.unsafe(`GRANT USAGE ON SCHEMA content TO ${APP_ROLE}`)
   await ddl.unsafe(`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA content TO ${APP_ROLE}`)
   await ddl.end()
@@ -429,6 +432,11 @@ async function main() {
   const articleTable = buildContentTable(article)
   const articleTags = buildLinkTable(article, 'tags')
   const taxonomyNodes = buildTaxonomyTable()
+  const personTable = buildContentTable(person)
+  const applicationTable = buildContentTable(application)
+  const capabilityTable = buildContentTable(capability)
+  const capabilityApps = buildLinkTable(capability, 'applications')
+  const capabilityChildren = buildLinkTable(capability, 'children')
   const ceApp = createTestDb(withCreds(smokeUrl, APP_ROLE, APP_PW))
 
   // Rule 1: a generated table is RLS-isolated like any hand-written one
@@ -597,6 +605,76 @@ async function main() {
       cols.every((c) => c.key in realRow) &&
       realRow.title === 'Via action',
   )
+
+  // ── Capability spike (Appendix B §892): the engine on GovEA's richest entity ──
+  // 1) the generated table is indistinguishable from a hand-written `capabilities`
+  const capSql = compileContentType(capability).sql
+  const handWritten = [
+    'CREATE TABLE IF NOT EXISTS content.capability (',
+    'name text NOT NULL',
+    'description text',
+    'behaviors text',
+    'rules text',
+    'capability_type text',
+    'owner_id uuid REFERENCES content.person (id) ON DELETE SET NULL',
+    'domain_node_id uuid REFERENCES content.taxonomy_nodes (id) ON DELETE SET NULL',
+    'completeness numeric', // the materialized computed column
+    'organization_id uuid NOT NULL REFERENCES govcore.organizations (id) ON DELETE CASCADE',
+    "status text NOT NULL DEFAULT 'draft'",
+    "CHECK (status IN ('draft', 'published', 'archived'))",
+    'CREATE INDEX IF NOT EXISTS capability_organization_id_idx ON content.capability (organization_id)',
+    'CREATE INDEX IF NOT EXISTS capability_owner_id_idx ON content.capability (owner_id)',
+    'CREATE INDEX IF NOT EXISTS capability_domain_node_id_idx ON content.capability (domain_node_id)',
+    'ALTER TABLE content.capability FORCE ROW LEVEL SECURITY;',
+    'CREATE POLICY capability_org_isolation ON content.capability',
+    'CREATE TABLE IF NOT EXISTS content.capability__applications (',
+    'CREATE TABLE IF NOT EXISTS content.capability__children (',
+  ]
+  check('spike: generated capability table is indistinguishable from hand-written', handWritten.every((s) => capSql.includes(s)))
+
+  // 2) end to end against Postgres: relationships + completeness + publish gate + taxonomy
+  const capActions = generateContentActions(tenantAction, capability, capabilityTable)
+  const [capOwner] = (await withTenant(ceApp.db, orgA.id, (tx) =>
+    tx.insert(personTable).values({ organizationId: orgA.id, full_name: 'Ada Lovelace' }).returning(),
+  )) as Array<{ id: string }>
+  const [ledger] = (await withTenant(ceApp.db, orgA.id, (tx) =>
+    tx.insert(applicationTable).values({ organizationId: orgA.id, name: 'Ledger' }).returning(),
+  )) as Array<{ id: string }>
+
+  const cap = (await capActions.create({ name: 'Payments' })) as { id: string; completeness: unknown }
+  check('spike: a new capability scores 0 completeness (nothing filled)', Number(cap.completeness) === 0 && capabilityCompleteness({}) === 0)
+
+  let capBlocked = false
+  try {
+    await capActions.publish({ id: cap.id })
+  } catch {
+    capBlocked = true
+  }
+  check('spike: publish-readiness gate blocks an unready capability', capBlocked)
+
+  // fill it out (owner + domain + description → ready) and wire the traceability links
+  await capActions.update({
+    id: cap.id,
+    values: { description: 'Accept and settle payments', owner_id: capOwner.id, domain_node_id: tree.cap.id },
+  })
+  const childCap = (await capActions.create({ name: 'Refunds' })) as { id: string }
+  await withTenant(ceApp.db, orgA.id, async (tx) => {
+    await addLink(tx, capabilityApps, { sourceId: cap.id, targetId: ledger.id, organizationId: orgA.id })
+    await addLink(tx, capabilityChildren, { sourceId: cap.id, targetId: childCap.id, organizationId: orgA.id })
+  })
+  const ready = (await capActions.get({ id: cap.id })) as { completeness: unknown }
+  check('spike: completeness materializes after filling owner + domain + description (3/5 = 60)', Number(ready.completeness) === 60)
+
+  const linkedApps = await withTenant(ceApp.db, orgA.id, (tx) => listLinkedIds(tx, capabilityApps, cap.id))
+  const linkedKids = await withTenant(ceApp.db, orgA.id, (tx) => listLinkedIds(tx, capabilityChildren, cap.id))
+  check('spike: to-many links resolve (applications + child hierarchy)', linkedApps.includes(ledger.id) && linkedKids.includes(childCap.id))
+
+  const capPub = (await capActions.publish({ id: cap.id })) as { status: string }
+  check('spike: publish gate passes once the capability is ready', capPub.status === 'published')
+
+  const capB = (await withTenant(ceApp.db, orgB.id, (tx) => tx.select().from(capabilityTable))) as unknown[]
+  check('spike: capability is RLS-isolated (orgB sees 0)', capB.length === 0)
+
   await ceApp.close()
 
   console.log(`\n${fail === 0 ? '✅ PASS' : '❌ FAIL'} — ${pass} passed, ${fail} failed`)
