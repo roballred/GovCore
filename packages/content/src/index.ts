@@ -14,7 +14,9 @@
 // Rule 3 (hooks): the escape hatch to real code — `beforePublish`/`afterPublish`/
 // `afterChange` hooks invoked by the `transition` lifecycle engine.
 //
-// Not yet here: generated actions/UI, taxonomy, and recipes — later slices.
+// Generated CRUD actions live in ./actions. Generated React screens are on the
+// separate `@govcore/content/screens` subpath (./screens) so this server entry
+// stays React-free. Not yet here: taxonomy and recipes — later slices.
 
 export * from './types'
 export * from './workflow'
