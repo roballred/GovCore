@@ -67,4 +67,25 @@ describe('defineContentType', () => {
       defineContentType({ name: 'cap', fields: [{ name: 'apps', type: 'link', to: 'Application' }] }),
     ).toThrow(/needs a snake_case "to"/)
   })
+
+  it('accepts a taxonomy field with a tree and requires the tree', () => {
+    expect(() =>
+      defineContentType({ name: 'cap', fields: [{ name: 'domain', type: 'taxonomy', tree: 'architecture-domains' }] }),
+    ).not.toThrow()
+    expect(() =>
+      defineContentType({ name: 'cap', fields: [{ name: 'domain', type: 'taxonomy' }] }),
+    ).toThrow(/needs a "tree"/)
+  })
+
+  it('rejects a taxonomy field colliding via its <name>_node_id column', () => {
+    expect(() =>
+      defineContentType({
+        name: 'cap',
+        fields: [
+          { name: 'domain', type: 'taxonomy', tree: 't' },
+          { name: 'domain_node_id', type: 'text' },
+        ],
+      }),
+    ).toThrow(/duplicate field|reserved|collides/)
+  })
 })

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { defineContentType } from './types'
-import { compileContentType } from './compile'
+import { compileContentType, taxonomySchemaDdl } from './compile'
 
 const note = defineContentType({
   name: 'note',
@@ -90,12 +90,42 @@ describe('compileContentType — relationships (Rule 2)', () => {
     expect(compiled.sql).toContain('CREATE POLICY capability__applications_org_isolation')
   })
 
-  it('still rejects a taxonomy field (later slice)', () => {
+  it('compiles a taxonomy field to a <name>_node_id FK into taxonomy_nodes', () => {
     const tagged = defineContentType({
       name: 'doc',
-      fields: [{ name: 'area', type: 'taxonomy', tree: 'domains' }],
+      fields: [
+        { name: 'area', type: 'taxonomy', tree: 'domains' }, // optional → SET NULL
+        { name: 'phase', type: 'taxonomy', tree: 'adm', required: true }, // → RESTRICT
+      ],
     })
-    expect(() => compileContentType(tagged)).toThrow(/not supported yet/)
+    const { sql } = compileContentType(tagged)
+    expect(sql).toContain('area_node_id uuid REFERENCES content.taxonomy_nodes (id) ON DELETE SET NULL')
+    expect(sql).toContain(
+      'phase_node_id uuid NOT NULL REFERENCES content.taxonomy_nodes (id) ON DELETE RESTRICT',
+    )
+    expect(sql).toContain('CREATE INDEX IF NOT EXISTS doc_area_node_id_idx ON content.doc (area_node_id)')
+  })
+})
+
+describe('taxonomySchemaDdl', () => {
+  const sql = taxonomySchemaDdl()
+
+  it('creates the engine-owned taxonomy_nodes table with a self-referencing parent FK', () => {
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS content.taxonomy_nodes (')
+    expect(sql).toContain(
+      'organization_id uuid NOT NULL REFERENCES govcore.organizations (id) ON DELETE CASCADE',
+    )
+    expect(sql).toContain('parent_id uuid REFERENCES content.taxonomy_nodes (id) ON DELETE CASCADE')
+    expect(sql).toContain('tree text NOT NULL')
+    expect(sql).toContain('slug text NOT NULL')
+  })
+
+  it('scopes slugs per org+tree and FORCEs RLS by the active-org GUC', () => {
+    expect(sql).toContain(
+      'CREATE UNIQUE INDEX IF NOT EXISTS taxonomy_nodes_slug_key ON content.taxonomy_nodes (organization_id, tree, slug)',
+    )
+    expect(sql).toContain('ALTER TABLE content.taxonomy_nodes FORCE ROW LEVEL SECURITY;')
+    expect(sql).toContain('CREATE POLICY taxonomy_nodes_org_isolation ON content.taxonomy_nodes')
   })
 })
 

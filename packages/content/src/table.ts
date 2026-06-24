@@ -19,11 +19,13 @@ import {
   isLinkField,
   isReferenceField,
   isScalarField,
+  isTaxonomyField,
   type ContentTypeDefinition,
   type ScalarFieldType,
 } from './types'
 import { DEFAULT_CONTENT_SCHEMA, linkJunctionName } from './compile'
 import { DEFAULT_WORKFLOW_STATUS } from './workflow'
+import { TAXONOMY_NODES_TABLE, taxonomyNodeColumn } from './taxonomy'
 
 function scalarBuilder(name: string, type: ScalarFieldType, required = false): PgColumnBuilderBase {
   const base =
@@ -62,6 +64,11 @@ export function buildContentTable(def: ContentTypeDefinition, opts: { schema?: s
       columns[`${f.name}_id`] = f.required ? col.notNull() : col
     } else if (isLinkField(f)) {
       continue // to-many lives in a junction table
+    } else if (isTaxonomyField(f)) {
+      // Files under a taxonomy_nodes row; JS key mirrors the column name.
+      const key = taxonomyNodeColumn(f.name)
+      const col = uuid(key)
+      columns[key] = f.required ? col.notNull() : col
     } else {
       throw new Error(
         `buildContentTable("${def.name}"): field "${f.name}" type "${f.type}" is not supported yet`,
@@ -90,6 +97,25 @@ export function buildLinkTable(
     sourceId: uuid('source_id').notNull(),
     targetId: uuid('target_id').notNull(),
     organizationId: uuid('organization_id').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  })
+}
+
+/**
+ * Build the Drizzle table for the engine-owned `taxonomy_nodes` — the shared
+ * classification table a `taxonomy` field files into. Mirrors `taxonomySchemaDdl`.
+ * Insert/query nodes through this; `buildTree` turns the rows into a hierarchy.
+ */
+export function buildTaxonomyTable(opts: { schema?: string } = {}) {
+  const s = pgSchema(opts.schema ?? DEFAULT_CONTENT_SCHEMA)
+  return s.table(TAXONOMY_NODES_TABLE, {
+    id: uuid('id').primaryKey().defaultRandom(),
+    organizationId: uuid('organization_id').notNull(),
+    tree: text('tree').notNull(),
+    parentId: uuid('parent_id'),
+    label: text('label').notNull(),
+    slug: text('slug').notNull(),
+    sort: numeric('sort').notNull().default('0'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   })
 }

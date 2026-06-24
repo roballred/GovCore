@@ -32,7 +32,15 @@ export interface CreateMiddlewareOptions {
 
 const DEFAULT_PUBLIC_PATHS = ['/login', '/setup', '/error', '/api/auth', '/maintenance']
 
-/** Matcher that excludes static assets and the Auth.js endpoints (they manage their own cookies). */
+/**
+ * Matcher that excludes static assets and the Auth.js endpoints (they manage
+ * their own cookies). Provided as the canonical reference value.
+ *
+ * NOTE: do NOT use this directly in `export const config = { matcher }` — Next.js
+ * statically parses the middleware `config` export at build time and rejects any
+ * value it can't resolve to a literal (it reports "Unknown identifier" /
+ * "Invalid segment configuration export"). Copy the literal inline instead.
+ */
 export const defaultMatcher = ['/((?!_next/static|_next/image|favicon.ico|api/auth).*)']
 
 /**
