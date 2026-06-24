@@ -54,6 +54,7 @@ import {
   compileContentType,
   defineContentType,
   listLinkedIds,
+  publish,
   recompute,
   withComputed,
 } from '@govcore/content'
@@ -387,6 +388,7 @@ async function main() {
     ],
   })
   const tag = defineContentType({ name: 'tag', fields: [{ name: 'name', type: 'text', required: true }] })
+  const hookLog: string[] = []
   const article = defineContentType({
     name: 'article',
     fields: [
@@ -398,6 +400,13 @@ async function main() {
       // materialized derived field, refreshed by recompute
       { name: 'well_tagged', type: 'boolean', materialized: true, compute: (row) => Boolean(row.primary_tag_id) },
     ],
+    hooks: {
+      // publish-readiness gate (Rule 3): real code, throws to block
+      beforePublish: (ctx) => {
+        if (!ctx.row.primary_tag_id) throw new Error('publish blocked: an article needs a primary tag')
+      },
+      afterPublish: () => hookLog.push('afterPublish'),
+    },
   })
   const ddl = postgres(smokeUrl, { max: 1 })
   for (const def of [note, tag, article]) await ddl.unsafe(compileContentType(def).sql) // tag before article (FK)
@@ -450,6 +459,26 @@ async function main() {
   )) as Array<{ well_tagged: boolean }>
   check('content: recompute persisted the materialized computed column', refreshed[0].well_tagged === true)
   check('content: withComputed derives the value on read', withComputed(article, refreshed[0]).well_tagged === true)
+
+  // Rule 3: per-type hooks via the transition lifecycle
+  const [untagged] = (await withTenant(ceApp.db, orgA.id, (tx) =>
+    tx.insert(articleTable).values({ organizationId: orgA.id, title: 'Untagged' }).returning(),
+  )) as Array<{ id: string }>
+  let publishBlocked = false
+  try {
+    await withTenant(ceApp.db, orgA.id, (tx) => publish(tx, articleTable, article, untagged.id))
+  } catch {
+    publishBlocked = true
+  }
+  check('content: beforePublish gate blocks an unready row', publishBlocked && hookLog.length === 0)
+
+  const published = await withTenant(ceApp.db, orgA.id, (tx) => publish(tx, articleTable, article, rel.art.id))
+  check('content: publish gate passes for a ready row', published.status === 'published')
+  check('content: afterPublish hook fired', hookLog.includes('afterPublish'))
+  const persisted = (await withTenant(ceApp.db, orgA.id, (tx) =>
+    tx.select().from(articleTable).where(eq(articleTable.id, rel.art.id)),
+  )) as Array<{ status: string }>
+  check('content: published status persisted', persisted[0].status === 'published')
   await ceApp.close()
 
   console.log(`\n${fail === 0 ? '✅ PASS' : '❌ FAIL'} — ${pass} passed, ${fail} failed`)
