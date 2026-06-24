@@ -32,8 +32,13 @@ export interface CreateTenantActionsConfig {
   db: GovcoreDb
   /** Resolve the current actor's active context — typically from the auth() session. */
   getActiveContext: () => Promise<ActiveContext | null>
-  /** Optional permission gate (e.g. an @govcore/rbac instance). */
-  rbac?: { hasPermission: (role: string, permission: string) => boolean }
+  /**
+   * Optional permission gate — pass an `@govcore/rbac` instance directly. Method
+   * syntax (not an arrow property) so its bivariant parameters accept a
+   * `createRbac<Role, Permission>()` whose `hasPermission` is typed with the
+   * app's role/permission *literals*, while the active role here is a `string`.
+   */
+  rbac?: { hasPermission(role: string, permission: string): boolean }
   /** Called when there is no active context. Default: throws Error('Unauthorized'). */
   onUnauthorized?: () => never
   /** Called when the permission check fails. Default: throws Error('Forbidden'). */

@@ -14,9 +14,7 @@ import { note, noteTable } from './note'
 
 const tenantAction = createTenantActions({
   db,
-  // createRbac types role/permission as the app's literals; tenantAction checks
-  // a session role typed as `string`, so adapt to the wide signature.
-  rbac: { hasPermission: (role: string, permission: string) => rbac.hasPermission(role as never, permission as never) },
+  rbac, // the createRbac instance plugs straight in (see CreateTenantActionsConfig)
   // The active context comes from the auth() session (stamped by @govcore/auth's
   // JWT/session callbacks), never from request input.
   getActiveContext: async () => {
