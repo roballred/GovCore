@@ -14,9 +14,12 @@
 // Rule 3 (hooks): the escape hatch to real code — `beforePublish`/`afterPublish`/
 // `afterChange` hooks invoked by the `transition` lifecycle engine.
 //
+// Taxonomy (./taxonomy): the shared classification — `buildTree` + the
+// engine-owned `taxonomy_nodes` table a `taxonomy` field files rows under.
+//
 // Generated CRUD actions live in ./actions. Generated React screens are on the
 // separate `@govcore/content/screens` subpath (./screens) so this server entry
-// stays React-free. Not yet here: taxonomy and recipes — later slices.
+// stays React-free. Not yet here: recipes — a later slice.
 
 export * from './types'
 export * from './workflow'
@@ -26,3 +29,4 @@ export * from './relationships'
 export * from './computed'
 export * from './hooks'
 export * from './actions'
+export * from './taxonomy'
