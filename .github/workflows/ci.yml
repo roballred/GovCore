@@ -28,6 +28,11 @@ jobs:
       # runtime env/DB and are exercised by the integration job instead.
       - run: pnpm build --filter='./packages/*'
       - run: pnpm test
+      # Edge-safety gate (§575): the packages a consumer imports in an edge
+      # runtime must pull no node: builtin or DB client, or every consumer's
+      # middleware silently breaks. Bundles schema/rbac/middleware for an
+      # edge-like target and fails on a node:/DB-client import.
+      - run: pnpm check:edge
 
   integration:
     name: Integration (Postgres — migrations, audit trigger, RLS)

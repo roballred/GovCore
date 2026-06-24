@@ -14,6 +14,9 @@ importers:
       '@types/node':
         specifier: ^22.0.0
         version: 22.20.0
+      esbuild:
+        specifier: 0.28.1
+        version: 0.28.1
       turbo:
         specifier: ^2.0.0
         version: 2.9.18

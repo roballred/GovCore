@@ -10,11 +10,13 @@
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release": "changeset publish",
-    "smoke": "pnpm --filter @govcore/example-smoke smoke"
+    "smoke": "pnpm --filter @govcore/example-smoke smoke",
+    "check:edge": "node scripts/check-edge-safety.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.27.0",
     "@types/node": "^22.0.0",
+    "esbuild": "0.28.1",
     "turbo": "^2.0.0",
     "typescript": "^5.5.0",
     "vitest": "^2.1.9"
