@@ -114,6 +114,9 @@ importers:
       '@govcore/schema':
         specifier: workspace:*
         version: link:../../packages/schema
+      '@govcore/server':
+        specifier: workspace:*
+        version: link:../../packages/server
       '@govcore/support':
         specifier: workspace:*
         version: link:../../packages/support
@@ -211,6 +214,9 @@ importers:
       '@govcore/schema':
         specifier: workspace:*
         version: link:../schema
+      '@govcore/server':
+        specifier: workspace:*
+        version: link:../server
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(postgres@3.4.9)
