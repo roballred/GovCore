@@ -1,6 +1,6 @@
 {
   "name": "@govcore/content",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Content engine: compile content-type definitions into real Drizzle tables + migrations",
   "type": "module",
   "main": "./src/index.ts",
@@ -19,7 +19,9 @@
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch"
   },
-  "publishConfig": { "access": "public" },
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "@govcore/nextkit": "workspace:*",
     "@govcore/schema": "workspace:*",
@@ -30,7 +32,9 @@
     "react": "^19.0.0"
   },
   "peerDependenciesMeta": {
-    "react": { "optional": true }
+    "react": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
