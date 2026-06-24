@@ -4,8 +4,8 @@
 // `content-types` stub). `defineContentType` validates the description so the
 // compiler and table builder downstream can trust it: identifiers are
 // snake_case, field names are unique and don't collide with the engine-reserved
-// columns. Relationship field types (`reference`, `taxonomy`) are part of the
-// vocabulary but are a later slice (Rule 2) — the compiler rejects them for now.
+// columns. Relationship field types — `reference` (to-one), `link` (to-many),
+// and `taxonomy` (filed under a classification tree) — are all first-class.
 
 /** Scalar field types the compiler can emit today. */
 export const SCALAR_FIELD_TYPES = ['text', 'textarea', 'number', 'boolean', 'date'] as const
@@ -13,7 +13,8 @@ export type ScalarFieldType = (typeof SCALAR_FIELD_TYPES)[number]
 
 /**
  * Relationship field types. `reference` (to-one) and `link` (to-many through a
- * generated junction) are implemented; `taxonomy` is a later slice.
+ * generated junction); `taxonomy` files the row under a node of a classification
+ * tree (a `<name>_node_id` FK into the engine-owned `taxonomy_nodes` table).
  */
 export const RELATIONSHIP_FIELD_TYPES = ['reference', 'link', 'taxonomy'] as const
 export type RelationshipFieldType = (typeof RELATIONSHIP_FIELD_TYPES)[number]
@@ -27,7 +28,7 @@ export interface FieldDefinition {
   label?: string
   /** For `reference`/`link` — the target content type's name. Required for those. */
   to?: string
-  /** For `taxonomy` — the tree name. Unused until the taxonomy slice. */
+  /** For `taxonomy` — the classification tree this field files the row under. Required. */
   tree?: string
 }
 
@@ -105,13 +106,32 @@ export function defineContentType(def: ContentTypeDefinition): ContentTypeDefini
         `defineContentType("${def.name}"): ${f.type} field "${f.name}" needs a snake_case "to" (target content type)`,
       )
     }
+    if (f.type === 'taxonomy' && !(f.tree ?? '').trim()) {
+      throw new Error(
+        `defineContentType("${def.name}"): taxonomy field "${f.name}" needs a "tree" (the classification tree name)`,
+      )
+    }
   }
 
   // Computed fields share the row/column namespace — reject collisions.
   const columnNames = new Set<string>(RESERVED_FIELD_NAMES)
   for (const f of def.fields) {
-    if (f.type === 'reference') columnNames.add(`${f.name}_id`)
-    else if (f.type !== 'link') columnNames.add(f.name)
+    // The real column a field maps to (link lives in a junction → no column).
+    const col =
+      f.type === 'reference'
+        ? `${f.name}_id`
+        : f.type === 'taxonomy'
+          ? `${f.name}_node_id`
+          : f.type === 'link'
+            ? null
+            : f.name
+    if (col === null) continue
+    if (columnNames.has(col)) {
+      throw new Error(
+        `defineContentType("${def.name}"): field "${f.name}" maps to column "${col}", which collides with an existing column`,
+      )
+    }
+    columnNames.add(col)
   }
   for (const c of def.computed ?? []) {
     if (!IDENTIFIER.test(c.name)) {
@@ -145,4 +165,8 @@ export function isReferenceField(f: FieldDefinition): f is FieldDefinition & { t
 
 export function isLinkField(f: FieldDefinition): f is FieldDefinition & { to: string } {
   return f.type === 'link'
+}
+
+export function isTaxonomyField(f: FieldDefinition): f is FieldDefinition & { tree: string } {
+  return f.type === 'taxonomy'
 }

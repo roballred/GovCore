@@ -49,15 +49,20 @@ import {
 import { cloneOrgInto, exportOrg, importOrg, registerBackupTables } from '@govcore/backup'
 import {
   addLink,
+  applyRecipe,
   buildContentTable,
   buildLinkTable,
+  buildTaxonomyTable,
+  buildTree,
   compileContentType,
   defineContentType,
   generateContentActions,
   listLinkedIds,
   publish,
   recompute,
+  taxonomySchemaDdl,
   withComputed,
+  type Recipe,
 } from '@govcore/content'
 import { contentColumns } from '@govcore/content/screens'
 import { createTenantActions } from '@govcore/server'
@@ -398,6 +403,7 @@ async function main() {
       { name: 'title', type: 'text', required: true },
       { name: 'primary_tag', type: 'reference', to: 'tag' }, // to-one
       { name: 'tags', type: 'link', to: 'tag' }, // to-many (junction)
+      { name: 'domain', type: 'taxonomy', tree: 'architecture-domains' }, // filed under a classification node
     ],
     computed: [
       // materialized derived field, refreshed by recompute
@@ -412,6 +418,7 @@ async function main() {
     },
   })
   const ddl = postgres(smokeUrl, { max: 1 })
+  await ddl.unsafe(taxonomySchemaDdl()) // engine-owned taxonomy_nodes — article.domain FKs into it
   for (const def of [note, tag, article]) await ddl.unsafe(compileContentType(def).sql) // tag before article (FK)
   await ddl.unsafe(`GRANT USAGE ON SCHEMA content TO ${APP_ROLE}`)
   await ddl.unsafe(`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA content TO ${APP_ROLE}`)
@@ -421,6 +428,7 @@ async function main() {
   const tagTable = buildContentTable(tag)
   const articleTable = buildContentTable(article)
   const articleTags = buildLinkTable(article, 'tags')
+  const taxonomyNodes = buildTaxonomyTable()
   const ceApp = createTestDb(withCreds(smokeUrl, APP_ROLE, APP_PW))
 
   // Rule 1: a generated table is RLS-isolated like any hand-written one
@@ -503,6 +511,80 @@ async function main() {
   const got = (await articleActions.get({ id: created.id })) as { status: string }
   check('content/action: get returns the published row', got.status === 'published')
 
+  // taxonomy: seed a classification tree, file a real row under a node, read back
+  const tree = await withTenant(ceApp.db, orgA.id, async (tx) => {
+    const [biz] = await tx
+      .insert(taxonomyNodes)
+      .values({ organizationId: orgA.id, tree: 'architecture-domains', label: 'Business', slug: 'business' })
+      .returning()
+    const [cap] = await tx
+      .insert(taxonomyNodes)
+      .values({ organizationId: orgA.id, tree: 'architecture-domains', parentId: biz.id, label: 'Capabilities', slug: 'capabilities' })
+      .returning()
+    // file the article under the child node
+    await tx.update(articleTable).set({ domain_node_id: cap.id }).where(eq(articleTable.id, rel.art.id))
+    return { biz, cap }
+  })
+  const filed = (await withTenant(ceApp.db, orgA.id, (tx) =>
+    tx.select().from(articleTable).where(eq(articleTable.id, rel.art.id)),
+  )) as Array<{ domain_node_id: string }>
+  check('content: taxonomy field files the row under a node (FK persisted)', filed[0].domain_node_id === tree.cap.id)
+
+  const nodesA = (await withTenant(ceApp.db, orgA.id, (tx) => tx.select().from(taxonomyNodes))) as Array<{
+    id: string
+    parentId: string | null
+    label: string
+    slug: string
+    tree: string
+  }>
+  const roots = buildTree(nodesA)
+  check(
+    'content: buildTree nests the classification under its root',
+    roots.length === 1 && roots[0].id === tree.biz.id && roots[0].children[0]?.id === tree.cap.id,
+  )
+  const nodesB = await withTenant(ceApp.db, orgB.id, (tx) => tx.select().from(taxonomyNodes))
+  check('content: taxonomy_nodes is RLS-isolated (orgB sees 0)', nodesB.length === 0)
+
+  // recipes: install a framework bundle (taxonomy + seed content) per org — ADR-0002
+  const togaf: Recipe = {
+    name: 'togaf',
+    taxonomies: [
+      {
+        tree: 'togaf-adm',
+        nodes: [{ slug: 'business', label: 'Business Architecture', children: [{ slug: 'capabilities', label: 'Capabilities' }] }],
+      },
+    ],
+    content: [
+      {
+        type: 'article',
+        dedupeBy: 'title',
+        // the seed row files under the installed node via its <name>_node_id column
+        rows: [{ title: 'Seeded Capability', domain_node_id: { $node: { tree: 'togaf-adm', slug: 'capabilities' } } }],
+      },
+    ],
+  }
+  const recipeRuntime = {
+    organizationId: orgA.id,
+    taxonomyTable: taxonomyNodes,
+    types: { article: { def: article, table: articleTable } },
+  }
+  const recipeApplied = await withTenant(ceApp.db, orgA.id, (tx) => applyRecipe(tx, togaf, recipeRuntime))
+  check('content/recipe: first apply installs the tree + seeds content', recipeApplied.taxonomyNodes === 2 && recipeApplied.contentRows === 1)
+
+  const seeded = (await withTenant(ceApp.db, orgA.id, (tx) =>
+    tx.select().from(articleTable).where(eq(articleTable.title, 'Seeded Capability')),
+  )) as Array<{ domain_node_id: string }>
+  const capId = recipeApplied.nodeIds['togaf-adm'].capabilities
+  check('content/recipe: seed row is filed under the installed node (resolved $node ref)', seeded.length === 1 && seeded[0].domain_node_id === capId)
+
+  const recipeReapplied = await withTenant(ceApp.db, orgA.id, (tx) => applyRecipe(tx, togaf, recipeRuntime))
+  check('content/recipe: re-apply is idempotent (no new nodes or rows)', recipeReapplied.taxonomyNodes === 0 && recipeReapplied.contentRows === 0)
+
+  const togafB = await withTenant(ceApp.db, orgB.id, (tx) =>
+    tx.select().from(taxonomyNodes).where(eq(taxonomyNodes.tree, 'togaf-adm')),
+  )
+  check('content/recipe: installed bundle is RLS-isolated (orgB sees 0)', togafB.length === 0)
+
   // generated screens: the columns the list screen derives map onto the real
   // RLS-scoped row shape (rendering itself is covered by screens.test.tsx).
   const screenRows = (await articleActions.list()) as Array<Record<string, unknown>>
@@ -510,8 +592,8 @@ async function main() {
   const cols = contentColumns(article)
   const colKeys = cols.map((c) => c.key)
   check(
-    'content/screen: derived columns match the real row shape (fields + computed + status)',
-    colKeys.join(',') === 'title,primary_tag_id,well_tagged,status' &&
+    'content/screen: derived columns match the real row shape (fields + taxonomy + computed + status)',
+    colKeys.join(',') === 'title,primary_tag_id,domain_node_id,well_tagged,status' &&
       cols.every((c) => c.key in realRow) &&
       realRow.title === 'Via action',
   )

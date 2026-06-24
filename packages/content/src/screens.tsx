@@ -16,10 +16,12 @@ import { Badge, DataTable, PageHeader, type Column } from '@govcore/nextkit'
 import {
   isLinkField,
   isReferenceField,
+  isTaxonomyField,
   type ContentTypeDefinition,
   type FieldDefinition,
 } from './types'
 import { WORKFLOW_STATUSES, type WorkflowStatus } from './workflow'
+import { taxonomyNodeColumn } from './taxonomy'
 
 type Row = Record<string, unknown>
 
@@ -37,9 +39,11 @@ function fieldLabel(f: { name: string; label?: string }): string {
   return f.label ?? humanize(f.name)
 }
 
-/** The row key a field reads from: `<name>_id` for references, else the name. */
+/** The row key a field reads from: `<name>_id` / `<name>_node_id` for FKs, else the name. */
 function fieldKey(f: FieldDefinition): string {
-  return isReferenceField(f) ? `${f.name}_id` : f.name
+  if (isReferenceField(f)) return `${f.name}_id`
+  if (isTaxonomyField(f)) return taxonomyNodeColumn(f.name)
+  return f.name
 }
 
 /** The lifecycle badge tone for a status (unknown → muted). */
@@ -107,11 +111,11 @@ export function contentColumns(
 
 /** A form input the engine derives from a field. `kind` maps to an HTML control. */
 export interface ContentFormField {
-  /** The form/row key (`<name>_id` for references). */
+  /** The form/row key (`<name>_id` for references, `<name>_node_id` for taxonomy). */
   name: string
   label: string
   required: boolean
-  kind: 'text' | 'textarea' | 'number' | 'checkbox' | 'date' | 'reference'
+  kind: 'text' | 'textarea' | 'number' | 'checkbox' | 'date' | 'reference' | 'taxonomy'
 }
 
 const SCALAR_KIND: Record<string, ContentFormField['kind']> = {
@@ -132,10 +136,12 @@ export function contentFormFields(def: ContentTypeDefinition): ContentFormField[
   for (const f of def.fields) {
     if (isReferenceField(f)) {
       fields.push({ name: `${f.name}_id`, label: fieldLabel(f), required: !!f.required, kind: 'reference' })
+    } else if (isTaxonomyField(f)) {
+      fields.push({ name: taxonomyNodeColumn(f.name), label: fieldLabel(f), required: !!f.required, kind: 'taxonomy' })
     } else if (SCALAR_KIND[f.type]) {
       fields.push({ name: f.name, label: fieldLabel(f), required: !!f.required, kind: SCALAR_KIND[f.type] })
     }
-    // link / taxonomy: not a direct input yet
+    // link: rendered via its own picker, not a direct input here
   }
   return fields
 }
