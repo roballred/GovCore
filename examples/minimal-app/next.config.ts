@@ -12,6 +12,7 @@ const nextConfig: NextConfig = {
     '@govcore/server',
     '@govcore/theme',
     '@govcore/nextkit',
+    '@govcore/content',
   ],
 }
 

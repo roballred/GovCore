@@ -13,6 +13,7 @@
   "dependencies": {
     "@govcore/audit": "workspace:*",
     "@govcore/auth": "workspace:*",
+    "@govcore/content": "workspace:*",
     "@govcore/middleware": "workspace:*",
     "@govcore/nextkit": "workspace:*",
     "@govcore/rbac": "workspace:*",

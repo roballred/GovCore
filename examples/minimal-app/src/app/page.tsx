@@ -4,14 +4,17 @@ export default function Home() {
       <h1 className="text-3xl font-semibold tracking-tight">GovCore — Minimal App</h1>
       <p className="mt-3 text-muted-foreground">
         A minimal Next.js app built entirely on the <code>@govcore/*</code> platform packages:
-        identity, tenancy, RBAC, audit, middleware, and the WCAG-AA theme.
+        identity, tenancy, RBAC, audit, middleware, the WCAG-AA theme, and the content engine.
       </p>
-      <div className="mt-8 flex gap-3">
+      <div className="mt-8 flex flex-wrap gap-3">
         <a
           href="/instance"
           className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
         >
           Open instance console
+        </a>
+        <a href="/notes" className="rounded-md border border-border px-4 py-2 text-sm font-medium">
+          Notes (content engine)
         </a>
         <a href="/login" className="rounded-md border border-border px-4 py-2 text-sm font-medium">
           Sign in
