@@ -49,6 +49,7 @@ import {
 import { cloneOrgInto, exportOrg, importOrg, registerBackupTables } from '@govcore/backup'
 import {
   addLink,
+  applyRecipe,
   buildContentTable,
   buildLinkTable,
   buildTaxonomyTable,
@@ -61,6 +62,7 @@ import {
   recompute,
   taxonomySchemaDdl,
   withComputed,
+  type Recipe,
 } from '@govcore/content'
 import { contentColumns } from '@govcore/content/screens'
 import { createTenantActions } from '@govcore/server'
@@ -542,6 +544,46 @@ async function main() {
   )
   const nodesB = await withTenant(ceApp.db, orgB.id, (tx) => tx.select().from(taxonomyNodes))
   check('content: taxonomy_nodes is RLS-isolated (orgB sees 0)', nodesB.length === 0)
+
+  // recipes: install a framework bundle (taxonomy + seed content) per org — ADR-0002
+  const togaf: Recipe = {
+    name: 'togaf',
+    taxonomies: [
+      {
+        tree: 'togaf-adm',
+        nodes: [{ slug: 'business', label: 'Business Architecture', children: [{ slug: 'capabilities', label: 'Capabilities' }] }],
+      },
+    ],
+    content: [
+      {
+        type: 'article',
+        dedupeBy: 'title',
+        // the seed row files under the installed node via its <name>_node_id column
+        rows: [{ title: 'Seeded Capability', domain_node_id: { $node: { tree: 'togaf-adm', slug: 'capabilities' } } }],
+      },
+    ],
+  }
+  const recipeRuntime = {
+    organizationId: orgA.id,
+    taxonomyTable: taxonomyNodes,
+    types: { article: { def: article, table: articleTable } },
+  }
+  const recipeApplied = await withTenant(ceApp.db, orgA.id, (tx) => applyRecipe(tx, togaf, recipeRuntime))
+  check('content/recipe: first apply installs the tree + seeds content', recipeApplied.taxonomyNodes === 2 && recipeApplied.contentRows === 1)
+
+  const seeded = (await withTenant(ceApp.db, orgA.id, (tx) =>
+    tx.select().from(articleTable).where(eq(articleTable.title, 'Seeded Capability')),
+  )) as Array<{ domain_node_id: string }>
+  const capId = recipeApplied.nodeIds['togaf-adm'].capabilities
+  check('content/recipe: seed row is filed under the installed node (resolved $node ref)', seeded.length === 1 && seeded[0].domain_node_id === capId)
+
+  const recipeReapplied = await withTenant(ceApp.db, orgA.id, (tx) => applyRecipe(tx, togaf, recipeRuntime))
+  check('content/recipe: re-apply is idempotent (no new nodes or rows)', recipeReapplied.taxonomyNodes === 0 && recipeReapplied.contentRows === 0)
+
+  const togafB = await withTenant(ceApp.db, orgB.id, (tx) =>
+    tx.select().from(taxonomyNodes).where(eq(taxonomyNodes.tree, 'togaf-adm')),
+  )
+  check('content/recipe: installed bundle is RLS-isolated (orgB sees 0)', togafB.length === 0)
 
   // generated screens: the columns the list screen derives map onto the real
   // RLS-scoped row shape (rendering itself is covered by screens.test.tsx).
