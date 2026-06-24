@@ -132,12 +132,6 @@ importers:
       postgres:
         specifier: ^3.4.0
         version: 3.4.9
-      react:
-        specifier: ^19.0.0
-        version: 19.2.7
-      react-dom:
-        specifier: ^19.0.0
-        version: 19.2.7(react@19.2.7)
     devDependencies:
       tsx:
         specifier: ^4.19.0

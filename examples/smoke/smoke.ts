@@ -59,10 +59,8 @@ import {
   recompute,
   withComputed,
 } from '@govcore/content'
-import { ContentListScreen } from '@govcore/content/screens'
+import { contentColumns } from '@govcore/content/screens'
 import { createTenantActions } from '@govcore/server'
-import { createElement } from 'react'
-import { renderToStaticMarkup } from 'react-dom/server'
 
 const BASE = process.env.DATABASE_URL
 if (!BASE) {
@@ -505,14 +503,17 @@ async function main() {
   const got = (await articleActions.get({ id: created.id })) as { status: string }
   check('content/action: get returns the published row', got.status === 'published')
 
-  // generated screens: the same definition renders the real RLS-scoped rows
+  // generated screens: the columns the list screen derives map onto the real
+  // RLS-scoped row shape (rendering itself is covered by screens.test.tsx).
   const screenRows = (await articleActions.list()) as Array<Record<string, unknown>>
-  const listHtml = renderToStaticMarkup(
-    createElement(ContentListScreen, { def: article, rows: screenRows, basePath: '/articles' }),
-  )
+  const realRow = screenRows.find((r) => r.id === created.id) as Record<string, unknown>
+  const cols = contentColumns(article)
+  const colKeys = cols.map((c) => c.key)
   check(
-    'content/screen: list screen renders the real listed rows + detail links',
-    listHtml.includes('Via action') && listHtml.includes(`/articles/${created.id}`),
+    'content/screen: derived columns match the real row shape (fields + computed + status)',
+    colKeys.join(',') === 'title,primary_tag_id,well_tagged,status' &&
+      cols.every((c) => c.key in realRow) &&
+      realRow.title === 'Via action',
   )
   await ceApp.close()
 
