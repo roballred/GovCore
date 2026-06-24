@@ -568,17 +568,17 @@ async function main() {
     taxonomyTable: taxonomyNodes,
     types: { article: { def: article, table: articleTable } },
   }
-  const applied = await withTenant(ceApp.db, orgA.id, (tx) => applyRecipe(tx, togaf, recipeRuntime))
-  check('content/recipe: first apply installs the tree + seeds content', applied.taxonomyNodes === 2 && applied.contentRows === 1)
+  const recipeApplied = await withTenant(ceApp.db, orgA.id, (tx) => applyRecipe(tx, togaf, recipeRuntime))
+  check('content/recipe: first apply installs the tree + seeds content', recipeApplied.taxonomyNodes === 2 && recipeApplied.contentRows === 1)
 
   const seeded = (await withTenant(ceApp.db, orgA.id, (tx) =>
     tx.select().from(articleTable).where(eq(articleTable.title, 'Seeded Capability')),
   )) as Array<{ domain_node_id: string }>
-  const capId = applied.nodeIds['togaf-adm'].capabilities
+  const capId = recipeApplied.nodeIds['togaf-adm'].capabilities
   check('content/recipe: seed row is filed under the installed node (resolved $node ref)', seeded.length === 1 && seeded[0].domain_node_id === capId)
 
-  const reapplied = await withTenant(ceApp.db, orgA.id, (tx) => applyRecipe(tx, togaf, recipeRuntime))
-  check('content/recipe: re-apply is idempotent (no new nodes or rows)', reapplied.taxonomyNodes === 0 && reapplied.contentRows === 0)
+  const recipeReapplied = await withTenant(ceApp.db, orgA.id, (tx) => applyRecipe(tx, togaf, recipeRuntime))
+  check('content/recipe: re-apply is idempotent (no new nodes or rows)', recipeReapplied.taxonomyNodes === 0 && recipeReapplied.contentRows === 0)
 
   const togafB = await withTenant(ceApp.db, orgB.id, (tx) =>
     tx.select().from(taxonomyNodes).where(eq(taxonomyNodes.tree, 'togaf-adm')),
