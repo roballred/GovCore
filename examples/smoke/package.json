@@ -14,6 +14,7 @@
     "@govcore/federation": "workspace:*",
     "@govcore/rbac": "workspace:*",
     "@govcore/schema": "workspace:*",
+    "@govcore/server": "workspace:*",
     "@govcore/support": "workspace:*",
     "@govcore/tenancy": "workspace:*",
     "@govcore/testing": "workspace:*",
