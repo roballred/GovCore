@@ -59,7 +59,10 @@ import {
   recompute,
   withComputed,
 } from '@govcore/content'
+import { ContentListScreen } from '@govcore/content/screens'
 import { createTenantActions } from '@govcore/server'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
 
 const BASE = process.env.DATABASE_URL
 if (!BASE) {
@@ -501,6 +504,16 @@ async function main() {
   check('content/action: publish runs the lifecycle gate + hook', pub.status === 'published')
   const got = (await articleActions.get({ id: created.id })) as { status: string }
   check('content/action: get returns the published row', got.status === 'published')
+
+  // generated screens: the same definition renders the real RLS-scoped rows
+  const screenRows = (await articleActions.list()) as Array<Record<string, unknown>>
+  const listHtml = renderToStaticMarkup(
+    createElement(ContentListScreen, { def: article, rows: screenRows, basePath: '/articles' }),
+  )
+  check(
+    'content/screen: list screen renders the real listed rows + detail links',
+    listHtml.includes('Via action') && listHtml.includes(`/articles/${created.id}`),
+  )
   await ceApp.close()
 
   console.log(`\n${fail === 0 ? '✅ PASS' : '❌ FAIL'} — ${pass} passed, ${fail} failed`)

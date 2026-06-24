@@ -19,7 +19,9 @@
     "@govcore/tenancy": "workspace:*",
     "@govcore/testing": "workspace:*",
     "drizzle-orm": "^0.45.2",
-    "postgres": "^3.4.0"
+    "postgres": "^3.4.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
     "tsx": "^4.19.0",

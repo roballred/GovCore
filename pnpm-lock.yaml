@@ -132,6 +132,12 @@ importers:
       postgres:
         specifier: ^3.4.0
         version: 3.4.9
+      react:
+        specifier: ^19.0.0
+        version: 19.2.7
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.2.7(react@19.2.7)
     devDependencies:
       tsx:
         specifier: ^4.19.0
@@ -211,6 +217,9 @@ importers:
 
   packages/content:
     dependencies:
+      '@govcore/nextkit':
+        specifier: workspace:*
+        version: link:../nextkit
       '@govcore/schema':
         specifier: workspace:*
         version: link:../schema
@@ -221,6 +230,15 @@ importers:
         specifier: ^0.45.2
         version: 0.45.2(postgres@3.4.9)
     devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.17
+      react:
+        specifier: ^19.0.0
+        version: 19.2.7
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.2.7(react@19.2.7)
       typescript:
         specifier: ^5.5.0
         version: 5.9.3
