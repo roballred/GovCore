@@ -31,10 +31,27 @@ export interface FieldDefinition {
   tree?: string
 }
 
+/**
+ * A derived field, backed by a pure function the engine calls (Rule 2). When
+ * `materialized`, the value is stored in a real column and refreshed by
+ * `recompute`; otherwise it is computed on read (`withComputed`).
+ */
+export interface ComputedFieldDefinition {
+  name: string
+  /** Scalar type of the computed value (also the materialized column type). */
+  type: ScalarFieldType
+  /** Pure function of the stored row → the derived value. */
+  compute: (row: Record<string, unknown>) => unknown
+  /** Store the value in a real column, refreshed on demand. Defaults to false (on-read). */
+  materialized?: boolean
+  label?: string
+}
+
 export interface ContentTypeDefinition {
   name: string
   label?: string
   fields: FieldDefinition[]
+  computed?: ComputedFieldDefinition[]
 }
 
 /** Columns the engine owns on every compiled table; field names may not collide. */
@@ -86,6 +103,32 @@ export function defineContentType(def: ContentTypeDefinition): ContentTypeDefini
         `defineContentType("${def.name}"): ${f.type} field "${f.name}" needs a snake_case "to" (target content type)`,
       )
     }
+  }
+
+  // Computed fields share the row/column namespace — reject collisions.
+  const columnNames = new Set<string>(RESERVED_FIELD_NAMES)
+  for (const f of def.fields) {
+    if (f.type === 'reference') columnNames.add(`${f.name}_id`)
+    else if (f.type !== 'link') columnNames.add(f.name)
+  }
+  for (const c of def.computed ?? []) {
+    if (!IDENTIFIER.test(c.name)) {
+      throw new Error(`defineContentType("${def.name}"): computed field "${c.name}" must be snake_case`)
+    }
+    if (columnNames.has(c.name)) {
+      throw new Error(
+        `defineContentType("${def.name}"): computed field "${c.name}" collides with an existing column`,
+      )
+    }
+    if (!(SCALAR_FIELD_TYPES as readonly string[]).includes(c.type)) {
+      throw new Error(
+        `defineContentType("${def.name}"): computed field "${c.name}" has unknown type "${c.type}"`,
+      )
+    }
+    if (typeof c.compute !== 'function') {
+      throw new Error(`defineContentType("${def.name}"): computed field "${c.name}" needs a compute function`)
+    }
+    columnNames.add(c.name)
   }
   return def
 }

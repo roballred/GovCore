@@ -68,6 +68,10 @@ export function buildContentTable(def: ContentTypeDefinition, opts: { schema?: s
       )
     }
   }
+  // Materialized computed fields carry a real (nullable) column.
+  for (const c of def.computed ?? []) {
+    if (c.materialized) columns[c.name] = scalarBuilder(c.name, c.type, false)
+  }
 
   return s.table(def.name, columns)
 }
