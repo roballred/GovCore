@@ -34,6 +34,26 @@ jobs:
       # edge-like target and fails on a node:/DB-client import.
       - run: pnpm check:edge
 
+  canary:
+    name: Canary consumer build (examples/minimal-app)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # §576: the minimal-app is the canary — "does a real consumer still
+      # compile?". It exercises auth, tenancy, RBAC, middleware, the theme, and
+      # the content engine (a `note` type → generated actions + screens). The
+      # build connects to nothing (dynamic pages); the dummy URL just satisfies
+      # the lazy postgres client at module load.
+      - run: pnpm --filter @govcore/example-minimal-app build
+        env:
+          DATABASE_URL: postgresql://localhost:5432/build
+
   integration:
     name: Integration (Postgres — migrations, audit trigger, RLS)
     runs-on: ubuntu-latest

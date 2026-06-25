@@ -8,12 +8,14 @@ import postgres from 'postgres'
 import { drizzle } from 'drizzle-orm/postgres-js'
 import { migrate } from '@govcore/schema/migrate'
 import { hashPassword } from '@govcore/auth/password'
+import { compileContentType, materializedValues } from '@govcore/content'
 import {
   auditLog,
   organizations,
   userOrganizationMemberships,
   users,
 } from '@govcore/schema'
+import { note, noteTable } from './src/content/note'
 
 const url = process.env.DATABASE_URL
 if (!url) {
@@ -37,8 +39,14 @@ async function main() {
   await admin.end()
   console.log(`• created ${dbName}`)
 
-  // 2. migrate
+  // 2. migrate the platform tables, then create the `note` content type's table
+  // (a consumer would fold this into their migration stream; the demo applies it
+  // inline so `pnpm dev` has somewhere to store notes).
   await migrate({ connectionString: url, log: (m) => console.log(`  ${m}`) })
+  const ddl = postgres(url!, { max: 1, onnotice: () => {} })
+  await ddl.unsafe(compileContentType(note).sql)
+  await ddl.end()
+  console.log('• created content type "note"')
 
   // 3. seed
   const sql = postgres(url!, { max: 1, onnotice: () => {} })
@@ -86,8 +94,17 @@ async function main() {
     { action: 'user.invite', entityType: 'user', entityId: member1.id, organizationId: orgA.id, userId: admin1.id },
   ])
 
+  // Seed a couple of notes for orgA. The note table FORCEs RLS, so set the
+  // active-org GUC first (the same scope tenantAction sets at request time).
+  await sql.unsafe(`SELECT set_config('app.current_org', '${orgA.id}', false)`)
+  const noteRows = [
+    { organizationId: orgA.id, title: 'Welcome to GovCore', body: 'This note lives in a table the content engine generated from a definition.' },
+    { organizationId: orgA.id, title: 'Row-level security is on', body: 'Only the active org can read this note.' },
+  ]
+  for (const r of noteRows) await db.insert(noteTable).values({ ...r, ...materializedValues(note, r) })
+
   await sql.end()
-  console.log('• seeded 2 orgs, 3 users, 3 memberships, 3 audit events')
+  console.log('• seeded 2 orgs, 3 users, 3 memberships, 3 audit events, 2 notes')
   console.log('  sign in: admin@govcore.test / govcore-demo')
 }
 
