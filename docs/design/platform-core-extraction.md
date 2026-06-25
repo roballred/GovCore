@@ -566,6 +566,8 @@ Steps 2–8 are **configuration and composition, not reimplementation** — that
 
 Because GovCore is semver'd, the app bumps `@govcore/*` like any dependency. A **minor/patch** bump is `pnpm up`. A **major** bump means a core schema changed (§8): the app bumps the version and runs `govcore-migrate`, which applies the new core-authored platform migrations (the app writes no DDL for them). The app upgrades when *it* chooses — GovEA and CivicTrack are never forced to move in lockstep, and because core owns the migrations there is no schema to reconcile by hand.
 
+> **GovEA-specific execution:** the concrete, phased steps for migrating GovEA (consumer zero) off `@govea/core` + `db:push` onto `@govcore/*` live in the [GovEA Cutover Runbook](../govea-cutover.md) — the §9 plan applied to GovEA's actual files.
+
 ---
 
 ## 8. Versioning and release
