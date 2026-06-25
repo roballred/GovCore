@@ -12,11 +12,6 @@
     },
     "./base.css": "./base.css"
   },
-  "files": [
-    "dist",
-    "src",
-    "base.css"
-  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch"

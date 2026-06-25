@@ -1,0 +1,11 @@
+# Published source-first (consumers transpile src via transpilePackages). Ship
+# dist/ + src/ (+ migrations/ for schema), but never tests, build caches, or
+# tooling config.
+*.test.ts
+*.test.tsx
+*.test.js
+*.test.d.ts
+*.test.d.ts.map
+.turbo
+tsconfig.json
+*.tsbuildinfo
