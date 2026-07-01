@@ -16,6 +16,9 @@ name: Release
 on:
   push:
     branches: [main]
+  # Manual trigger so the first release (and any later on-demand publish) can be
+  # kicked off without a dummy commit. Still gated by `vars.NPM_PUBLISH == 'true'`.
+  workflow_dispatch:
 
 permissions:
   contents: write
