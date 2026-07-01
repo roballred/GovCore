@@ -1,5 +1,12 @@
 # @govcore/content
 
+## 0.1.1
+
+### Patch Changes
+
+- Updated dependencies [f3bce48]
+  - @govcore/server@0.1.1
+
 ## 0.1.0
 
 ### Minor Changes
