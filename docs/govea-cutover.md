@@ -10,15 +10,40 @@ the work itself happens in the **GovEA repo** (`/Users/robbot/Repos/Claude/govea
 
 ## Preconditions
 
-- **GovCore is published** as `0.x` to the `@govcore` scope (requires the `NPM_TOKEN`
-  secret + `NPM_PUBLISH=true` to be set — see `.github/workflows/release.yml`). GovEA
-  consumes pinned `0.x` prereleases during the cutover, then `^1.0` once GovCore cuts 1.0.
+- **Publishing is _not_ a prerequisite.** Each package is adopted at whichever stage it has
+  reached (see *Consumption model* below): an unpublished package is consumed via `link:` to the
+  sibling GovCore checkout; a published one is consumed from the registry. Publishing to the
+  `@govcore` scope requires the `NPM_TOKEN` secret + `NPM_PUBLISH=true` (see
+  `.github/workflows/release.yml`). GovEA pins `0.x` prereleases during the cutover, then moves to
+  `^1.0` once GovCore cuts 1.0.
 - **GovEA is not in production.** This relaxes the hardest part of §9: there is no live
   data to reconcile, so the platform-table migration cutover is a **clean rebuild**
   (drop the dev DB, re-create from `govcore-migrate`), not a careful in-place migration.
 - The cutover is **incremental and reversible** — each phase ships behind thin re-export
   shims (the pattern GovEA's `lib/rbac.ts` already uses for `@govea/core`), so GovEA stays
   green throughout. Revert a phase by reverting its shim.
+
+### Consumption model — `link:` → npm, per package
+
+Packages are adopted before the whole scope is published, so each `@govcore/*` package moves
+through **two stages independently** (whichever is published wins):
+
+1. **Local-link stage** (package not yet on npm): `"@govcore/<name>": "link:../../../GovCore/packages/<name>"`
+   in `apps/govea/package.json`, resolving to the sibling GovCore checkout's source. CI has no
+   sibling checkout, so a composite action (`.github/actions/setup-govcore-link`) clones public
+   GovCore `main` into `$GITHUB_WORKSPACE/../GovCore` before `pnpm install` in every app job.
+   Watch for duplicate `react`/`next-auth`/`drizzle-orm` instances across the two node_modules.
+2. **npm stage** (package published): `"@govcore/<name>": "^0.1.0"`, resolved from the registry.
+   Drop the `link:`; once no linked packages remain, delete `setup-govcore-link` and its CI steps.
+
+**Invariant across both stages:** GovCore packages are **source-first** (`main: ./src/index.ts`,
+ship `src/`, no built `dist/`) *even when published to npm*. Every consumed `@govcore/*` package
+must therefore stay in `transpilePackages` in `apps/govea/next.config.ts` regardless of
+link-vs-npm — copy the pattern from `examples/minimal-app/next.config.ts`.
+
+**Proven:** `@govcore/rbac` completed both stages — linked in GovEA #886, then switched to
+`@govcore/rbac@^0.1.0` from npm in GovEA #887 (link + CI clone action removed), green on CI.
+This is the template for every subsequent package/phase below.
 
 ## What core owns vs. what GovEA keeps
 
@@ -50,10 +75,13 @@ the work itself happens in the **GovEA repo** (`/Users/robbot/Repos/Claude/govea
 
 ## Phase 0 — Add the dependency + move RBAC first (lowest risk)
 
-The pure, DB-free move — exactly how GovCore itself started (§9 Phase 0).
+The pure, DB-free move — exactly how GovCore itself started (§9 Phase 0). **Status: done —
+`@govcore/rbac` is the completed template (linked in GovEA #886, switched to npm in #887).**
 
-1. Add `@govcore/*` `0.x` to `apps/govea/package.json` (peers `next`/`drizzle-orm`/`next-auth`
-   are already present).
+1. Add `@govcore/rbac` to `apps/govea/package.json` at its current stage — `link:` if it is not
+   yet published, else `^0.x` from npm (peers `next`/`drizzle-orm`/`next-auth` are already
+   present). Keep it in `transpilePackages` either way (the source-first invariant). See the
+   *Consumption model* above for the `link:` → npm mechanics and the CI clone action.
 2. Build the RBAC instance from GovEA's existing role map:
    ```ts
    // apps/govea/src/lib/rbac.ts
@@ -66,6 +94,10 @@ The pure, DB-free move — exactly how GovCore itself started (§9 Phase 0).
 3. **Verify:** `rbac-single-source` passes; type-check green.
 
 ## Phase 1 — Schema re-export + the migration cutover (the pivotal step)
+
+**Status: in progress.** GovEA's prep is merged (GovEA's CLAUDE.md calls it "Phase 1a": the
+org-settings sidecar keeps `organizations` core-shaped so it maps onto the platform table).
+The steps below — the re-export + migration switch, "Phase 1b" in GovEA's terms — are next.
 
 1. In `apps/govea/src/db/schema/index.ts`, **re-export** the core platform tables and
    **delete** the local files for them:
@@ -162,4 +194,8 @@ The security edge cases live here — do this phase behind the strictest review.
 - **Auth/middleware (Phase 3)** carries the security edge cases — highest scrutiny, do it alone.
 - **Backup round-trip (Phase 4.3)** must match pre-cutover behavior exactly before trusting it.
 - **Inline middleware matcher** — Next's segment-config parser rejects an imported matcher value.
-- **Publishing must be enabled first** — GovEA can't depend on unpublished packages.
+- **Source-first consumption, not "publish everything first"** — GovCore ships `src/` (no
+  `dist/`) even when published, so every consumed `@govcore/*` package must stay in GovEA's
+  `transpilePackages`, and unpublished packages are consumed via `link:` (no scope-wide publish
+  gate). In the link stage, watch for duplicated `react`/`next-auth`/`drizzle-orm` across the two
+  `node_modules`.

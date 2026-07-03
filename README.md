@@ -4,11 +4,13 @@
 
 GovCore packages the hardened "platform plane" that every serious multi-tenant SaaS re-implements badly — identity, organizations, memberships and active-organization resolution, role-based access control, audit, federation, and support-access (break-glass / act-as) sessions — into versioned `@govcore/*` packages, so a new app can stand up a secure multi-tenant foundation in well under a day and spend its time on its own domain instead.
 
-A comprehensive **content engine** (define a content type as data, get storage/validation/lifecycle/UI) is planned as GovCore's second milestone.
+A comprehensive **content engine** (define a content type as data, get storage/validation/lifecycle/UI) — GovCore's second milestone — is built and proven end to end (see Status).
 
 ## Status
 
-**Early / in active extraction.** This repository was seeded from the [GovEA](https://github.com/roballred/GovEA) codebase — GovEA is the production app this platform plane is being extracted *from*, and is GovCore's first consumer. The GovEA-specific seed has been stripped, leaving a clean packages-only monorepo. `@govcore/rbac` and `@govcore/schema` are implemented; the remaining packages are skeletons being filled in phase by phase. Platform code still to be ported is read from the sibling GovEA repo.
+**Platform plane v1 implemented; GovEA cutover in progress.** This repository was seeded from the [GovEA](https://github.com/roballred/GovEA) codebase — GovEA is the app this platform plane was extracted *from*, and is GovCore's first consumer. All 14 `@govcore/*` packages are implemented and **published to npm at `0.x`** (Changesets `release.yml`, `workflow_dispatch`). The content engine (`@govcore/content`) is built and proven: definition→Drizzle compiler, relationships and computed fields, lifecycle hooks, generated CRUD `tenantAction`s and React screens, taxonomy, and recipes — exercised by the DB-backed `examples/smoke` suite in CI and dogfooded in `examples/minimal-app`.
+
+**GovEA cutover status:** Phase 0 is done (`@govcore/rbac` consumed from npm; GovEA #886/#887) and GovEA's org-settings sidecar prep ("Phase 1a") is merged; the schema re-export + migration cutover is next. Runbook: [`docs/govea-cutover.md`](./docs/govea-cutover.md). Migrating GovEA's entities onto the content engine is app-side work and has not started.
 
 **The plan is the source of truth:** [`docs/design/platform-core-extraction.md`](./docs/design/platform-core-extraction.md). Read it before doing anything here — it holds the architecture, the locked decisions, the package layout, the phased extraction plan, and the security hardening (RLS + two-role DB, generic RBAC, WCAG base theme, backup/restore, content engine).
 
@@ -16,7 +18,7 @@ A comprehensive **content engine** (define a content type as data, get storage/v
 
 GovCore owns **tenants, identity, and trust** — "who can do what, in which org, and how do we prove it." It does **not** own any particular app's domain. An app brings its own entities (capabilities, permits, inspections…) and gets tenancy, auth, audit, and accessibility for free.
 
-Planned packages (see design §3):
+Packages (see design §3; all implemented and published):
 
 | Package | Responsibility |
 |---|---|

@@ -1,7 +1,7 @@
 # Platform Core Extraction — Reusable Multi-Tenant Foundation
 
 **Initiative:** GovCore — a standalone platform-core initiative (its own repo, backlog, versioning, and release lifecycle), independent of GovEA's roadmap. GovEA is the first consumer, not the owner.
-**Status:** Proposal — core decisions locked; Phase 0–1 work breakdown in §12
+**Status:** Implemented (platform plane v1 + the Milestone-2 content engine; packages published to npm at `0.x`) — core decisions locked. §12 records the executed Phase 0–1 breakdown; the GovEA-side cutover continues per the [runbook](../govea-cutover.md)
 **Author:** AI-assisted · drafted 2026-06-19 · last updated 2026-06-21
 **Audience:** Maintainer + architecture reviewers
 **License:** MIT (§11.7)
@@ -645,19 +645,19 @@ Binding decisions are recorded in this document (the §1 decisions table and the
 
 ### Phase 0 — repo skeleton + generic RBAC
 
-- [ ] Stand up the GovCore repository: package skeletons, changesets, CI (typecheck, lint, edge-safety import gate, `examples/minimal-app` build).
-- [ ] Ship `@govcore/rbac` as a **generic `createRbac`** factory (§13.3); GovEA's `admin/contributor/viewer` map is the default export.
-- [ ] GovEA consumes `@govcore/rbac`; the `rbac-single-source` test stays green (one definition, now produced by `createRbac(...)`).
+- [x] Stand up the GovCore repository: package skeletons, changesets, CI (typecheck, lint, edge-safety import gate, `examples/minimal-app` build).
+- [x] Ship `@govcore/rbac` as a **generic `createRbac`** factory (§13.3); GovEA's `admin/contributor/viewer` map is the default export.
+- [x] GovEA consumes `@govcore/rbac`; the `rbac-single-source` test stays green (one definition, now produced by `createRbac(...)`). *(Linked in GovEA #886, switched to npm in #887.)*
 
 **Done when:** `@govcore/rbac` is generic, GovEA builds on it with no behavior change, and `examples/minimal-app` compiles in CI.
 
 ### Phase 1 — platform schema + migrations + RLS + two-role DB
 
-- [ ] `@govcore/schema`: platform table defs in a dedicated `govcore` Postgres schema namespace (§13.4); dependency-free / edge-safe export.
-- [ ] `0000_platform_init` migration, the `audit-immutable` trigger as a raw-SQL migration step, and a `govcore-migrate` runner with a `__govcore_migrations` tracking table.
-- [ ] **RLS** policies + `FORCE ROW LEVEL SECURITY` on platform tables; transaction-local org GUC plumbed through the tenant transaction (§13.1).
-- [ ] **Two-role DB**: owner/DDL role for `govcore-migrate`, non-owner runtime role for the app (§13.2).
-- [ ] GovEA re-exports core tables and switches its **platform** tables from `db:push` to `govcore-migrate` — the ADR-008 cutover for the platform layer (§5). Domain tables may stay on `db:push` for now.
+- [x] `@govcore/schema`: platform table defs in a dedicated `govcore` Postgres schema namespace (§13.4); dependency-free / edge-safe export.
+- [x] `0000_platform_init` migration, the `audit-immutable` trigger as a raw-SQL migration step, and a `govcore-migrate` runner with a `__govcore_migrations` tracking table.
+- [x] **RLS** policies + `FORCE ROW LEVEL SECURITY` on platform tables; transaction-local org GUC plumbed through the tenant transaction (§13.1).
+- [x] **Two-role DB**: owner/DDL role for `govcore-migrate`, non-owner runtime role for the app (§13.2).
+- [ ] GovEA re-exports core tables and switches its **platform** tables from `db:push` to `govcore-migrate` — the ADR-008 cutover for the platform layer (§5). Domain tables may stay on `db:push` for now. *(**Outstanding** — this is the GovEA-side runbook Phase 1: the org-settings sidecar prep is merged in GovEA; the re-export + migration switch is next.)*
 
 **Done when (verified in CI — no local Postgres):** `govcore-migrate` builds the platform schema from a clean database; the audit trigger blocks `UPDATE`/`DELETE`; an integration test proves **RLS denies a cross-org read**; GovEA CI stays green.
 

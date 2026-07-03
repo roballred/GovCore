@@ -6,7 +6,7 @@ This is a Codex-specific pointer and guardrail layer. It does not replace the go
 
 ## What GovCore Is
 
-A reusable, opinionated multi-tenant **platform core** for Next.js apps, published as `@govcore/*` packages (identity, tenancy, RBAC, audit, federation, support sessions, middleware, theming; a content engine later). A **standalone initiative**, separate from [GovEA](https://github.com/roballred/GovEA), which is its first consumer. **Do not modify GovEA from this repo.**
+A reusable, opinionated multi-tenant **platform core** for Next.js apps, published as `@govcore/*` packages (identity, tenancy, RBAC, audit, federation, support sessions, middleware, theming, and a content engine). A **standalone initiative**, separate from [GovEA](https://github.com/roballred/GovEA), which is its first consumer. **Do not modify GovEA from this repo.**
 
 ## Required Reading Order
 
@@ -15,7 +15,7 @@ A reusable, opinionated multi-tenant **platform core** for Next.js apps, publish
 
 ## Current State
 
-GovCore was seeded from GovEA `main`, and the **GovEA-specific seed has now been stripped** — it is a clean, packages-only monorepo. `@govcore/rbac` and `@govcore/schema` are implemented; the rest are skeletons (see `packages/README.md`). The platform code still to be ported (auth, middleware, federation, support, backup, theme) lives in the **sibling GovEA repo at `/Users/robbot/Repos/Claude/govea-app`** — read it as the source for Phases 2–4, but never modify it.
+**`CLAUDE.md`'s "Current State" section is canonical — read it.** Summary: GovCore is a clean, packages-only monorepo (the GovEA seed was stripped); **all 14 `@govcore/*` packages are implemented and published to npm at `0.x`**, including the Milestone-2 content engine (built, smoke-tested in CI, dogfooded in `examples/minimal-app`). The GovEA cutover is in progress (Phase 0 done; see `docs/govea-cutover.md`). The sibling GovEA repo at `/Users/robbot/Repos/Claude/govea-app` remains the read-only reference for migrating GovEA's entities onto the content engine — never modify it from here.
 
 ## Branch & PR Hygiene
 
