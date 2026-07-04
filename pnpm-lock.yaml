@@ -276,6 +276,10 @@ importers:
         version: 5.9.3
 
   packages/nextkit:
+    dependencies:
+      '@govcore/theme':
+        specifier: workspace:*
+        version: link:../theme
     devDependencies:
       '@types/react':
         specifier: ^19.0.0

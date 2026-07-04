@@ -18,6 +18,9 @@
   "publishConfig": {
     "access": "public"
   },
+  "dependencies": {
+    "@govcore/theme": "workspace:*"
+  },
   "peerDependencies": {
     "react": "^19.0.0"
   },
