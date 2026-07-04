@@ -209,3 +209,19 @@ describe('parseContentForm', () => {
     })
   })
 })
+
+describe('ContentForm choices', () => {
+  it('renders a select for an enumerated scalar field, prefilled on edit', () => {
+    const html = renderToStaticMarkup(
+      <ContentForm
+        def={article}
+        action="/x"
+        row={{ id: 'a1', title: 'Hello', body: 'b' }}
+        choices={{ title: [{ value: 'Hello', label: 'Hello' }, { value: 'Bye', label: 'Bye' }] }}
+      />,
+    )
+    expect(html).toContain('<select')
+    expect(html).toContain('name="title"')
+    expect(html).toMatch(/<option[^>]*selected[^>]*value="Hello"|<option[^>]*value="Hello"[^>]*selected/)
+  })
+})

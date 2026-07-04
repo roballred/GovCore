@@ -282,12 +282,18 @@ export function ContentForm({
   row,
   submitLabel,
   references,
+  choices,
 }: {
   def: ContentTypeDefinition
   action: ContentFormAction
   row?: Row
   submitLabel?: string
   references?: ReferenceDisplayMap
+  /**
+   * Enumerated scalar fields (stage, status, type, …), keyed by field name:
+   * render a select over these options instead of a free input.
+   */
+  choices?: Record<string, Array<{ value: string; label: string }>>
 }): ReactNode {
   const fields = contentFormFields(def)
   const editing = !!row?.id
@@ -296,7 +302,10 @@ export function ContentForm({
       {editing ? <input type="hidden" name="id" value={String(row?.id ?? '')} /> : null}
       {fields.map((f) => {
         const value = row?.[f.name]
-        const options = f.kind === 'reference' && f.field ? references?.[f.field]?.options : undefined
+        const options =
+          f.kind === 'reference' && f.field
+            ? references?.[f.field]?.options
+            : choices?.[f.name]
         return (
           <div key={f.name}>
             <label htmlFor={f.name} className="text-sm font-medium text-foreground">
