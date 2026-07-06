@@ -211,3 +211,16 @@ export function DataTable<Row extends Record<string, unknown>>({
     </div>
   )
 }
+
+// ── Support access ────────────────────────────────────────────────────────────
+// Break-glass / act-as surfaces. In a sibling module because they reference the
+// @govcore/support status vocabulary; re-exported here as the package's API.
+export {
+  SupportSessionsTable,
+  TenantSupportVisibility,
+  ActAsBanner,
+  BreakGlassGrantForm,
+  supportStatusTone,
+  type SupportSessionView,
+  type GrantFormOrg,
+} from './support'
