@@ -60,6 +60,45 @@ export function statusTone(status: unknown): 'default' | 'muted' | 'danger' {
   }
 }
 
+// ── Reference display (#61) ─────────────────────────────────────────────────
+
+/**
+ * How a `reference` field displays and edits. `options` feeds the ContentForm
+ * select (build it from the target type's `list()`); `labels` (id → label)
+ * feeds list/detail rendering and is derived from `options` when omitted;
+ * `hrefBase` links the rendered label to `${hrefBase}/${id}`.
+ */
+export interface ReferenceDisplay {
+  options?: Array<{ value: string; label: string }>
+  labels?: Record<string, string>
+  hrefBase?: string
+}
+
+/** Keyed by the reference **field name** (`account`), not its `account_id` column. */
+export type ReferenceDisplayMap = Record<string, ReferenceDisplay>
+
+function refLabel(display: ReferenceDisplay | undefined, id: string): string {
+  return (
+    display?.labels?.[id] ??
+    display?.options?.find((o) => o.value === id)?.label ??
+    `${id.slice(0, 8)}…`
+  )
+}
+
+/** Render a reference value: label (linked when hrefBase is set); `—` for null. */
+function renderRefValue(display: ReferenceDisplay | undefined, value: unknown): ReactNode {
+  if (value == null || value === '') return '—'
+  const id = String(value)
+  const label = refLabel(display, id)
+  return display?.hrefBase ? (
+    <a className="text-primary hover:underline" href={`${display.hrefBase}/${id}`}>
+      {label}
+    </a>
+  ) : (
+    label
+  )
+}
+
 /** The field whose value titles a row in lists/detail — the first text field. */
 function primaryField(def: ContentTypeDefinition): FieldDefinition | undefined {
   return def.fields.find((f) => f.type === 'text') ?? def.fields.find((f) => f.type === 'textarea')
@@ -73,7 +112,7 @@ function primaryField(def: ContentTypeDefinition): FieldDefinition | undefined {
  */
 export function contentColumns(
   def: ContentTypeDefinition,
-  opts: { basePath?: string } = {},
+  opts: { basePath?: string; references?: ReferenceDisplayMap } = {},
 ): Column<Row>[] {
   const primary = primaryField(def)
   const columns: Column<Row>[] = []
@@ -82,6 +121,7 @@ export function contentColumns(
     if (isLinkField(f)) continue // to-many has no column on the row
     const key = fieldKey(f)
     const isPrimary = primary?.name === f.name
+    const refDisplay = isReferenceField(f) ? opts.references?.[f.name] : undefined
     columns.push({
       key,
       header: fieldLabel(f),
@@ -92,7 +132,9 @@ export function contentColumns(
                 {String(row[key] ?? '')}
               </a>
             )
-          : undefined,
+          : isReferenceField(f) && opts.references
+            ? (row) => renderRefValue(refDisplay, row[key])
+            : undefined,
     })
   }
 
@@ -116,6 +158,8 @@ export interface ContentFormField {
   label: string
   required: boolean
   kind: 'text' | 'textarea' | 'number' | 'checkbox' | 'date' | 'reference' | 'taxonomy'
+  /** For `reference`/`taxonomy`: the source field name (the ReferenceDisplayMap key). */
+  field?: string
 }
 
 const SCALAR_KIND: Record<string, ContentFormField['kind']> = {
@@ -135,9 +179,9 @@ export function contentFormFields(def: ContentTypeDefinition): ContentFormField[
   const fields: ContentFormField[] = []
   for (const f of def.fields) {
     if (isReferenceField(f)) {
-      fields.push({ name: `${f.name}_id`, label: fieldLabel(f), required: !!f.required, kind: 'reference' })
+      fields.push({ name: `${f.name}_id`, label: fieldLabel(f), required: !!f.required, kind: 'reference', field: f.name })
     } else if (isTaxonomyField(f)) {
-      fields.push({ name: taxonomyNodeColumn(f.name), label: fieldLabel(f), required: !!f.required, kind: 'taxonomy' })
+      fields.push({ name: taxonomyNodeColumn(f.name), label: fieldLabel(f), required: !!f.required, kind: 'taxonomy', field: f.name })
     } else if (SCALAR_KIND[f.type]) {
       fields.push({ name: f.name, label: fieldLabel(f), required: !!f.required, kind: SCALAR_KIND[f.type] })
     }
@@ -158,18 +202,20 @@ export function ContentListScreen({
   basePath,
   title,
   description,
+  references,
 }: {
   def: ContentTypeDefinition
   rows: Row[]
   basePath?: string
   title?: string
   description?: string
+  references?: ReferenceDisplayMap
 }) {
   const label = title ?? def.label ?? humanize(def.name)
   return (
     <div>
       <PageHeader title={label} description={description} />
-      <DataTable columns={contentColumns(def, { basePath })} rows={rows} empty={`No ${label.toLowerCase()} yet.`} />
+      <DataTable columns={contentColumns(def, { basePath, references })} rows={rows} empty={`No ${label.toLowerCase()} yet.`} />
     </div>
   )
 }
@@ -183,27 +229,33 @@ export function ContentDetailScreen({
   def,
   row,
   title,
+  references,
+  actions,
 }: {
   def: ContentTypeDefinition
   row: Row
   title?: string
+  references?: ReferenceDisplayMap
+  /** Header slot for an Edit link, publish button, etc. */
+  actions?: ReactNode
 }) {
   const primary = primaryField(def)
   const primaryValue = primary ? String(row[primary.name] ?? '') : ''
   const heading = title ?? (primaryValue || def.label || humanize(def.name))
-  const entries = contentColumns(def).filter((c) => c.key !== STATUS_KEY)
+  const entries = contentColumns(def, { references }).filter((c) => c.key !== STATUS_KEY)
 
   return (
     <div>
       <div className="mb-6 flex items-center gap-3">
         <h1 className="text-2xl font-semibold tracking-tight">{heading}</h1>
         <Badge tone={statusTone(row.status)}>{String(row.status ?? '')}</Badge>
+        {actions ? <div className="ml-auto">{actions}</div> : null}
       </div>
       <dl className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2">
         {entries.map((c) => (
           <div key={c.key}>
             <dt className="text-sm text-muted-foreground">{c.header}</dt>
-            <dd className="mt-0.5 text-foreground">{String(row[c.key] ?? '')}</dd>
+            <dd className="mt-0.5 text-foreground">{c.cell ? c.cell(row) : String(row[c.key] ?? '')}</dd>
           </div>
         ))}
       </dl>
@@ -229,11 +281,19 @@ export function ContentForm({
   action,
   row,
   submitLabel,
+  references,
+  choices,
 }: {
   def: ContentTypeDefinition
   action: ContentFormAction
   row?: Row
   submitLabel?: string
+  references?: ReferenceDisplayMap
+  /**
+   * Enumerated scalar fields (stage, status, type, …), keyed by field name:
+   * render a select over these options instead of a free input.
+   */
+  choices?: Record<string, Array<{ value: string; label: string }>>
 }): ReactNode {
   const fields = contentFormFields(def)
   const editing = !!row?.id
@@ -242,13 +302,32 @@ export function ContentForm({
       {editing ? <input type="hidden" name="id" value={String(row?.id ?? '')} /> : null}
       {fields.map((f) => {
         const value = row?.[f.name]
+        const options =
+          f.kind === 'reference' && f.field
+            ? references?.[f.field]?.options
+            : choices?.[f.name]
         return (
           <div key={f.name}>
             <label htmlFor={f.name} className="text-sm font-medium text-foreground">
               {f.label}
               {f.required ? <span className="text-destructive"> *</span> : null}
             </label>
-            {f.kind === 'textarea' ? (
+            {options ? (
+              <select
+                id={f.name}
+                name={f.name}
+                required={f.required}
+                defaultValue={String(value ?? '')}
+                className={inputClass()}
+              >
+                {f.required ? null : <option value="">—</option>}
+                {options.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            ) : f.kind === 'textarea' ? (
               <textarea id={f.name} name={f.name} required={f.required} defaultValue={String(value ?? '')} className={inputClass()} rows={4} />
             ) : f.kind === 'checkbox' ? (
               <input id={f.name} name={f.name} type="checkbox" defaultChecked={!!value} className="mt-1 block" />
@@ -270,6 +349,26 @@ export function ContentForm({
       </button>
     </form>
   )
+}
+
+/**
+ * The canonical coercion from a posted ContentForm to a row for the generated
+ * `create`/`update` actions: empty optional inputs become `null` (uuid, date,
+ * and numeric columns reject `''`), checkboxes become booleans, values are
+ * trimmed, and keys outside the form-field set are ignored.
+ */
+export function parseContentForm(def: ContentTypeDefinition, formData: FormData): Row {
+  const row: Row = {}
+  for (const f of contentFormFields(def)) {
+    if (f.kind === 'checkbox') {
+      row[f.name] = formData.get(f.name) === 'on'
+      continue
+    }
+    const raw = formData.get(f.name)
+    const value = typeof raw === 'string' ? raw.trim() : ''
+    row[f.name] = value === '' ? (f.required ? '' : null) : value
+  }
+  return row
 }
 
 /** The lifecycle states a content type can be in — handy for status filters. */
