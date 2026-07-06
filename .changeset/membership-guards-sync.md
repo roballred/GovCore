@@ -1,0 +1,5 @@
+---
+'@govcore/tenancy': minor
+---
+
+Membership guards + write-sync as core invariants (#65). The last-active-admin guard, previously re-derived (and diverged) in every consumer, now lives here: `leavesActiveAdminSet` and `wouldOrphanOrg` are pure predicates over a `MembershipChange`, and `assertNotLastActiveAdmin(db, { organizationId, adminRole, change })` composes them over the authoritative membership count, throwing a typed `LastActiveAdminError` (carrying `organizationId`) — so guarding an org against losing its last admin no longer depends on which column a consumer happened to count. `upsertMembership(db, …)` and `setMembershipActiveFlag(db, …)` own the transactional write-sync half: pass your `tx` so the membership row (the source of truth at session resolution) is written in the same transaction as any denormalized `users` columns. All generic over the app's role vocabulary — callers pass their admin role name. Existing exports (`resolveActiveMembership`, `activeMembershipCountByRole`, `findMembership`) are unchanged; internals were split into `memberships`/`guards`/`sync` modules behind the same barrel.
