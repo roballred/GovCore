@@ -13,9 +13,15 @@ import { eq } from 'drizzle-orm'
 import { migrate } from '@govcore/schema/migrate'
 import { users, userOrganizationMemberships } from '@govcore/schema'
 import { createRbac } from '@govcore/rbac'
-import { activeMembershipCountByRole, resolveActiveMembership } from '@govcore/tenancy'
+import {
+  activeMembershipCountByRole,
+  createOrganization,
+  renameOrganization,
+  resolveActiveMembership,
+  updateUserAdministration,
+} from '@govcore/tenancy'
+import { adminResetPassword, changePassword, hashPassword, provisionUser, verifyPassword } from '@govcore/auth'
 import { listAuditForOrg, writeAuditLog } from '@govcore/audit'
-import { adminResetPassword, changePassword, hashPassword, verifyPassword } from '@govcore/auth'
 import {
   addMembership,
   createTestDb,
@@ -237,6 +243,87 @@ async function main() {
   check(
     'no audit payload leaks a password',
     !pwAudit.some((r) => /initial-pw-1|brand-new-pw-2|operator-set-pw-3/.test(JSON.stringify(r))),
+  )
+
+  // 6c. operator console flows: org + user administration (audited; on a fresh
+  // org so orgA/orgB assertions below stay untouched).
+  const consoleOrg = await createOrganization(owner.db, { name: 'Town of Cedar Falls', actorUserId: userA.id })
+  check('createOrganization succeeds + auto-slugs', consoleOrg.ok && consoleOrg.organization.slug === 'town-of-cedar-falls', JSON.stringify(consoleOrg))
+  const consoleOrgId = consoleOrg.ok ? consoleOrg.organization.id : ''
+
+  const dupeSlug = await createOrganization(owner.db, { name: 'Town of Cedar Falls', actorUserId: userA.id })
+  check('createOrganization rejects a duplicate slug', !dupeSlug.ok && dupeSlug.reason === 'slug-taken', JSON.stringify(dupeSlug))
+
+  const noName = await createOrganization(owner.db, { name: '   ', actorUserId: userA.id })
+  check('createOrganization rejects an empty name', !noName.ok && noName.reason === 'name-required')
+
+  const renamed = await renameOrganization(owner.db, { organizationId: consoleOrgId, name: 'City of Cedar Falls', actorUserId: userA.id })
+  check('renameOrganization succeeds', renamed.ok)
+  const renameMissing = await renameOrganization(owner.db, { organizationId: randomUUID(), name: 'Nowhere', actorUserId: userA.id })
+  check('renameOrganization on a missing org → not-found', !renameMissing.ok && renameMissing.reason === 'not-found')
+
+  const prov1 = await provisionUser(owner.db, {
+    email: 'admin1@cedarfalls.example', name: 'Admin One', organizationId: consoleOrgId,
+    role: 'admin', password: 'cedar-admin-1', actorUserId: userA.id,
+  })
+  check('provisionUser creates a user + membership', prov1.ok, JSON.stringify(prov1))
+  const admin1Id = prov1.ok ? prov1.userId : ''
+  check('provisioned user resolves to its org/role via membership',
+    (await resolveActiveMembership(owner.db, admin1Id))?.role === 'admin')
+
+  const dupeEmail = await provisionUser(owner.db, {
+    email: 'admin1@cedarfalls.example', organizationId: consoleOrgId, role: 'viewer', password: 'another-pw-x', actorUserId: userA.id,
+  })
+  check('provisionUser rejects a duplicate email', !dupeEmail.ok && dupeEmail.reason === 'email-taken', JSON.stringify(dupeEmail))
+
+  const weakProv = await provisionUser(owner.db, {
+    email: 'weak@cedarfalls.example', organizationId: consoleOrgId, role: 'viewer', password: 'short', actorUserId: userA.id,
+  })
+  check('provisionUser enforces the password policy', !weakProv.ok && weakProv.reason === 'weak-password')
+
+  // last-admin guard: admin1 is the console org's only admin
+  const demoteLast = await updateUserAdministration(owner.db, {
+    userId: admin1Id, role: 'viewer', isActive: true, instanceAdmin: false, actorUserId: userA.id, adminRole: 'admin',
+  })
+  check('updateUserAdministration blocks demoting the last admin', !demoteLast.ok && demoteLast.reason === 'last-admin', JSON.stringify(demoteLast))
+  const [admin1Still] = await owner.db.select().from(users).where(eq(users.id, admin1Id))
+  check('blocked demotion left the row unchanged', admin1Still.role === 'admin')
+
+  // add a second admin, then the demotion is allowed + the membership is synced
+  const prov2 = await provisionUser(owner.db, {
+    email: 'admin2@cedarfalls.example', organizationId: consoleOrgId, role: 'admin', password: 'cedar-admin-2', actorUserId: userA.id,
+  })
+  check('provisionUser (second admin) succeeds', prov2.ok)
+  const demoteOk = await updateUserAdministration(owner.db, {
+    userId: admin1Id, role: 'viewer', isActive: true, instanceAdmin: false, actorUserId: userA.id, adminRole: 'admin',
+  })
+  check('updateUserAdministration demotes once another admin exists', demoteOk.ok, JSON.stringify(demoteOk))
+  check('membership role synced to the demoted role',
+    (await resolveActiveMembership(owner.db, admin1Id))?.role === 'viewer')
+
+  // own-instance-admin lockout
+  const provIa = await provisionUser(owner.db, {
+    email: 'ia@cedarfalls.example', organizationId: consoleOrgId, role: 'viewer', instanceAdmin: true, password: 'cedar-ia-pw', actorUserId: userA.id,
+  })
+  const iaId = provIa.ok ? provIa.userId : ''
+  const selfDemote = await updateUserAdministration(owner.db, {
+    userId: iaId, role: 'viewer', isActive: true, instanceAdmin: false, actorUserId: iaId, adminRole: 'admin',
+  })
+  check('updateUserAdministration blocks removing your own instance-admin', !selfDemote.ok && selfDemote.reason === 'own-instance-admin', JSON.stringify(selfDemote))
+
+  const consoleAudit = await listAuditForOrg(owner.db, consoleOrgId)
+  const consoleActions = new Set(consoleAudit.map((r) => r.action))
+  check(
+    'console flows audited (org.create/update + user.create/update)',
+    consoleActions.has('platform.org.create') &&
+      consoleActions.has('platform.org.update') &&
+      consoleActions.has('platform.user.create') &&
+      consoleActions.has('platform.user.update'),
+    [...consoleActions].join(','),
+  )
+  check(
+    'no console audit payload leaks a password',
+    !consoleAudit.some((r) => /cedar-admin-1|cedar-admin-2|cedar-ia-pw/.test(JSON.stringify(r))),
   )
 
   // 7. immutability trigger (fires for superuser too)
