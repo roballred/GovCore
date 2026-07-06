@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@govcore/audit": "workspace:*",
+    "@govcore/auth": "workspace:*",
     "@govcore/backup": "workspace:*",
     "@govcore/content": "workspace:*",
     "@govcore/federation": "workspace:*",
