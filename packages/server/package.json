@@ -1,6 +1,6 @@
 {
   "name": "@govcore/server",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "tenantAction — the server-action wrapper that opens the tenant transaction, sets the RLS org GUC, gates on permission, and binds audit",
   "type": "module",
   "main": "./dist/index.js",

@@ -1,6 +1,6 @@
 {
   "name": "@govcore/theme",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "WCAG-AA base theme: design tokens (base.css), a Tailwind preset, and defineTheme with a brand-var allowlist",
   "type": "module",
   "main": "./dist/index.js",
