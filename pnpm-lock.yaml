@@ -105,6 +105,9 @@ importers:
       '@govcore/audit':
         specifier: workspace:*
         version: link:../../packages/audit
+      '@govcore/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
       '@govcore/backup':
         specifier: workspace:*
         version: link:../../packages/backup

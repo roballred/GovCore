@@ -51,3 +51,33 @@ export function validatePassword(
   }
   return { valid: true }
 }
+
+/**
+ * The `organizations.metadata` key under which a per-org PasswordPolicy is
+ * stored. GovCore models no security-settings column — `metadata` is the
+ * documented extension point (formalizing org settings is tracked in #69), so a
+ * consumer wanting per-org rules stashes a policy here and resolves it with
+ * {@link passwordPolicyFromMetadata}.
+ */
+export const PASSWORD_POLICY_METADATA_KEY = 'passwordPolicy'
+
+/**
+ * Extract a {@link PasswordPolicy} from an org's `metadata` bag, or `undefined`
+ * when absent or malformed (callers then fall back to FALLBACK_MIN_LENGTH via
+ * {@link validatePassword}). Pure: only known policy fields carrying the right
+ * primitive type are copied, so arbitrary values in the metadata bag can't
+ * smuggle in unexpected rules.
+ */
+export function passwordPolicyFromMetadata(metadata: unknown): PasswordPolicy | undefined {
+  if (!metadata || typeof metadata !== 'object') return undefined
+  const raw = (metadata as Record<string, unknown>)[PASSWORD_POLICY_METADATA_KEY]
+  if (!raw || typeof raw !== 'object') return undefined
+  const r = raw as Record<string, unknown>
+  const policy: PasswordPolicy = {}
+  if (typeof r.minLength === 'number') policy.minLength = r.minLength
+  if (typeof r.requireUppercase === 'boolean') policy.requireUppercase = r.requireUppercase
+  if (typeof r.requireLowercase === 'boolean') policy.requireLowercase = r.requireLowercase
+  if (typeof r.requireDigit === 'boolean') policy.requireDigit = r.requireDigit
+  if (typeof r.requireSpecial === 'boolean') policy.requireSpecial = r.requireSpecial
+  return Object.keys(policy).length > 0 ? policy : undefined
+}

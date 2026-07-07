@@ -180,8 +180,17 @@ export function createAuth(opts: CreateAuthOptions) {
   })
 }
 
-export { hashPassword, verifyPassword, validatePassword, FALLBACK_MIN_LENGTH } from './password'
+export {
+  hashPassword,
+  verifyPassword,
+  validatePassword,
+  FALLBACK_MIN_LENGTH,
+  passwordPolicyFromMetadata,
+  PASSWORD_POLICY_METADATA_KEY,
+} from './password'
 export type { PasswordPolicy, PasswordValidationResult } from './password'
+export { changePassword, adminResetPassword } from './password-flows'
+export type { PasswordChangeResult, PasswordResetResult } from './password-flows'
 export { checkSsoProvisioning } from './sso-guard'
 export type { SsoCheckResult } from './sso-guard'
 export {

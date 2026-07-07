@@ -15,6 +15,7 @@ import { users, userOrganizationMemberships } from '@govcore/schema'
 import { createRbac } from '@govcore/rbac'
 import { activeMembershipCountByRole, resolveActiveMembership } from '@govcore/tenancy'
 import { listAuditForOrg, writeAuditLog } from '@govcore/audit'
+import { adminResetPassword, changePassword, hashPassword, verifyPassword } from '@govcore/auth'
 import {
   addMembership,
   createTestDb,
@@ -158,6 +159,80 @@ async function main() {
   })
   const auditRows = await listAuditForOrg(owner.db, orgA.id)
   check('audit row written + readable', auditRows.length === 1 && auditRows[0].action === 'org.create', `(${auditRows.length})`)
+
+  // 6b. password flows: self-service change + operator reset over @govcore/schema.users
+  await owner.db.update(users).set({ passwordHash: await hashPassword('initial-pw-1', 4) }).where(eq(users.id, userA.id))
+
+  const wrongCurrent = await changePassword(owner.db, {
+    userId: userA.id,
+    currentPassword: 'not-the-password',
+    newPassword: 'brand-new-pw-2',
+  })
+  check(
+    'changePassword rejects a wrong current password',
+    !wrongCurrent.ok && wrongCurrent.reason === 'current-incorrect',
+    JSON.stringify(wrongCurrent),
+  )
+
+  const changed = await changePassword(owner.db, {
+    userId: userA.id,
+    currentPassword: 'initial-pw-1',
+    newPassword: 'brand-new-pw-2',
+  })
+  check('changePassword succeeds with the correct current password', changed.ok, JSON.stringify(changed))
+
+  const [afterChange] = await owner.db.select().from(users).where(eq(users.id, userA.id)).limit(1)
+  check(
+    'changePassword actually rehashed the row',
+    !!afterChange.passwordHash && (await verifyPassword('brand-new-pw-2', afterChange.passwordHash)),
+  )
+
+  const reused = await changePassword(owner.db, {
+    userId: userA.id,
+    currentPassword: 'brand-new-pw-2',
+    newPassword: 'brand-new-pw-2',
+  })
+  check('changePassword rejects reuse of the current password', !reused.ok && reused.reason === 'reused', JSON.stringify(reused))
+
+  const weak = await changePassword(owner.db, {
+    userId: userA.id,
+    currentPassword: 'brand-new-pw-2',
+    newPassword: 'short',
+  })
+  check('changePassword enforces the policy on the new password', !weak.ok && weak.reason === 'weak-password', JSON.stringify(weak))
+
+  const reset = await adminResetPassword(owner.db, {
+    userId: userA.id,
+    newPassword: 'operator-set-pw-3',
+    actorUserId: userB.id,
+  })
+  check('adminResetPassword succeeds without the current password', reset.ok, JSON.stringify(reset))
+
+  const [afterReset] = await owner.db.select().from(users).where(eq(users.id, userA.id)).limit(1)
+  check(
+    'adminResetPassword rehashed + cleared lockout state',
+    (await verifyPassword('operator-set-pw-3', afterReset.passwordHash!)) &&
+      afterReset.failedLoginAttempts === 0 &&
+      afterReset.lockoutUntil === null,
+  )
+
+  const pwAudit = await listAuditForOrg(owner.db, orgA.id)
+  const pwActions = pwAudit.map((r) => r.action)
+  check(
+    'password change + reset audited (fail, change, reset)',
+    pwActions.includes('auth.password_change_failed') &&
+      pwActions.includes('auth.password_changed') &&
+      pwActions.includes('auth.password_reset'),
+    pwActions.join(','),
+  )
+  check(
+    'reset audit is attributed to the operator, not the target',
+    pwAudit.find((r) => r.action === 'auth.password_reset')?.userId === userB.id,
+  )
+  check(
+    'no audit payload leaks a password',
+    !pwAudit.some((r) => /initial-pw-1|brand-new-pw-2|operator-set-pw-3/.test(JSON.stringify(r))),
+  )
 
   // 7. immutability trigger (fires for superuser too)
   let blocked = false
