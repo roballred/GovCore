@@ -1,5 +1,15 @@
 # @govcore/content
 
+## 0.2.1
+
+### Patch Changes
+
+- Updated dependencies [d255afc]
+- Updated dependencies [2b7d55e]
+  - @govcore/schema@0.2.0
+  - @govcore/nextkit@0.3.0
+  - @govcore/server@0.1.2
+
 ## 0.2.0
 
 ### Minor Changes

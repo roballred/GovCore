@@ -1,6 +1,6 @@
 {
   "name": "@govcore/audit",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Append-only audit writer (the immutability trigger ships in @govcore/schema)",
   "type": "module",
   "main": "./src/index.ts",
