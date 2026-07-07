@@ -38,13 +38,37 @@ export const organizations = govcore.table(
     id: uuid('id').primaryKey().defaultRandom(),
     name: text('name').notNull(),
     slug: text('slug').notNull(),
-    /** App-extensible bag for org settings GovCore itself doesn't model. */
+    /**
+     * Lifecycle state — see ORGANIZATION_STATUSES. `active` is the only state in
+     * which a tenant transaction runs or a session resolves; `suspended` and
+     * `archived` (soft-delete) are blocked at the createAuth + tenantAction gates.
+     */
+    status: text('status').notNull().default('active'),
+    /** Why the org was suspended/archived — surfaced to operators; cleared on reinstate. */
+    statusReason: text('status_reason'),
+    statusChangedAt: timestamp('status_changed_at'),
+    /** Historical UUID of the operator who last changed status — no FK on purpose. */
+    statusChangedBy: uuid('status_changed_by'),
+    /**
+     * App-extensible bag for org settings GovCore itself doesn't model. NOT for
+     * platform-modeled concerns (lifecycle now lives in `status`, not here); keys
+     * are the consuming app's own namespace.
+     */
     metadata: jsonb('metadata').notNull().default({}),
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
   },
   (t) => [uniqueIndex('organizations_slug_unique').on(t.slug)],
 )
+
+/** Organization lifecycle states. Only `active` permits tenant access. */
+export const ORGANIZATION_STATUSES = ['active', 'suspended', 'archived'] as const
+export type OrganizationStatus = (typeof ORGANIZATION_STATUSES)[number]
+
+/** Pure: may an org in this status resolve sessions and run tenant transactions? */
+export function isOrganizationActive(status: string | null | undefined): boolean {
+  return status === 'active'
+}
 
 /**
  * The tenancy column contract (design §5): every tenant-scoped table — core's
