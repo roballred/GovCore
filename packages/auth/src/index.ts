@@ -182,6 +182,8 @@ export function createAuth(opts: CreateAuthOptions) {
 
 export { hashPassword, verifyPassword, validatePassword, FALLBACK_MIN_LENGTH } from './password'
 export type { PasswordPolicy, PasswordValidationResult } from './password'
+export { provisionUser } from './provisioning'
+export type { ProvisionUserResult } from './provisioning'
 export { checkSsoProvisioning } from './sso-guard'
 export type { SsoCheckResult } from './sso-guard'
 export {
