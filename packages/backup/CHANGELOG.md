@@ -1,5 +1,12 @@
 # @govcore/backup
 
+## 0.2.1
+
+### Patch Changes
+
+- Updated dependencies [d255afc]
+  - @govcore/schema@0.2.0
+
 ## 0.2.0
 
 ### Minor Changes

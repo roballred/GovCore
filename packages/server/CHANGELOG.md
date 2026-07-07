@@ -1,5 +1,13 @@
 # @govcore/server
 
+## 0.1.2
+
+### Patch Changes
+
+- Updated dependencies [d255afc]
+  - @govcore/schema@0.2.0
+  - @govcore/audit@0.1.1
+
 ## 0.1.1
 
 ### Patch Changes
