@@ -736,12 +736,14 @@ async function main() {
   check('content/action: get returns the published row', got.status === 'published')
 
   // org lifecycle (#69): a suspended/archived org runs no tenant transactions.
-  // Isolated on a fresh org so the orgA assertions above/below are untouched.
-  const lifeOrgRes = await createOrganization(owner.db, { name: 'Lifecycle Test Org', actorUserId: userA.id })
+  // Isolated on a fresh org + its own pool (`owner` was closed back in §7), so
+  // the orgA assertions above/below are untouched.
+  const life = createTestDb(smokeUrl)
+  const lifeOrgRes = await createOrganization(life.db, { name: 'Lifecycle Test Org', actorUserId: userA.id })
   const lifeOrgId = lifeOrgRes.ok ? lifeOrgRes.organization.id : ''
   const lifeActions = generateContentActions(
     createTenantActions({
-      db: owner.db,
+      db: life.db,
       getActiveContext: async () => ({ userId: userA.id, organizationId: lifeOrgId, role: 'admin' }),
     }),
     article,
@@ -749,26 +751,27 @@ async function main() {
   )
   check('org lifecycle: an active org runs tenant transactions', Array.isArray(await lifeActions.list()))
 
-  await suspendOrganization(owner.db, { organizationId: lifeOrgId, reason: 'smoke: nonpayment', actorUserId: userA.id })
+  await suspendOrganization(life.db, { organizationId: lifeOrgId, reason: 'smoke: nonpayment', actorUserId: userA.id })
   let suspendedBlocked = false
   try { await lifeActions.list() } catch { suspendedBlocked = true }
   check('org lifecycle: a suspended org blocks tenant transactions', suspendedBlocked)
 
-  await reinstateOrganization(owner.db, { organizationId: lifeOrgId, actorUserId: userA.id })
+  await reinstateOrganization(life.db, { organizationId: lifeOrgId, actorUserId: userA.id })
   check('org lifecycle: reinstate restores tenant access', Array.isArray(await lifeActions.list()))
 
-  await archiveOrganization(owner.db, { organizationId: lifeOrgId, reason: 'smoke: retired', actorUserId: userA.id })
+  await archiveOrganization(life.db, { organizationId: lifeOrgId, reason: 'smoke: retired', actorUserId: userA.id })
   let archivedBlocked = false
   try { await lifeActions.list() } catch { archivedBlocked = true }
   check('org lifecycle: an archived org blocks tenant transactions', archivedBlocked)
 
-  const lifeAudit = await listAuditForOrg(owner.db, lifeOrgId)
+  const lifeAudit = await listAuditForOrg(life.db, lifeOrgId)
   check(
     'org lifecycle: transitions are audited (suspend/reinstate/archive)',
     ['platform.org.suspend', 'platform.org.reinstate', 'platform.org.archive'].every((a) =>
       lifeAudit.some((r) => r.action === a),
     ),
   )
+  await life.close()
 
   // taxonomy: seed a classification tree, file a real row under a node, read back
   const tree = await withTenant(ceApp.db, orgA.id, async (tx) => {
