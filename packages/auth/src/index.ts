@@ -26,8 +26,29 @@ import { LOGGED_OUT_MARKER_COOKIE } from './logout-marker'
 import './types'
 
 export interface CreateAuthOptions {
-  /** The app's Drizzle db (postgres-js). */
+  /**
+   * The app's Drizzle db (postgres-js). Used for identity/session work unless
+   * `authDb` is given, in which case `authDb` handles all of it and this is
+   * unused by createAuth (still accepted so single-pool setups pass just `db`).
+   */
   db: GovcoreDb
+  /**
+   * Identity-plane db for the pre-/cross-session reads createAuth performs.
+   *
+   * Under the two-role split the runtime `db` connects as a non-owner, so every
+   * read of `govcore.users`/memberships is FORCE-RLS-filtered by the
+   * `app.current_org` GUC — which cannot exist before a session does. A
+   * credentials login therefore finds zero rows and fails with CredentialsSignin.
+   * Pass a pool that bypasses that RLS here — a superuser or a `BYPASSRLS`
+   * role (note: FORCE RLS binds even the table owner, so the owner alone is not
+   * enough); createAuth uses it for the Auth.js adapter, the credentials lookup,
+   * the SSO-provisioning check, active-membership resolution, and login/logout
+   * audit — all of which run before or across any tenant context.
+   *
+   * Defaults to `db` — correct for single-role/dev setups where the identity
+   * tables are not RLS-restricted before a session exists.
+   */
+  authDb?: GovcoreDb
   /** OIDC providers to enable (e.g. MicrosoftEntraID(...)). Local credentials are always added. */
   providers?: NextAuthConfig['providers']
   /** Role assigned when neither a membership nor a denormalized role is present. */
@@ -39,7 +60,10 @@ export interface CreateAuthOptions {
 }
 
 export function createAuth(opts: CreateAuthOptions) {
-  const { db } = opts
+  // Everything createAuth touches (adapter, credentials lookup, membership
+  // resolution, login/logout audit) is identity-plane and runs before/across a
+  // tenant context, so it all uses the RLS-bypassing authDb when supplied.
+  const db = opts.authDb ?? opts.db
   const defaultRole = opts.defaultRole ?? 'viewer'
 
   return NextAuth({

@@ -99,3 +99,11 @@ export function createTenantActions(config: CreateTenantActionsConfig) {
     }
   }
 }
+
+export {
+  createOperatorActions,
+  INSTANCE_ADMIN_ROLE,
+  type OperatorContext,
+  type CreateOperatorActionsConfig,
+  type OperatorActionHandler,
+} from './operator'
