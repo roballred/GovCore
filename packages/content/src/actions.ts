@@ -7,7 +7,7 @@
 // materialized computed columns current; publish/archive delegate to the Rule 3
 // `transition` engine so the lifecycle hooks fire.
 
-import { eq } from 'drizzle-orm'
+import { count, eq } from 'drizzle-orm'
 import type { AnyPgColumn, PgTable } from 'drizzle-orm/pg-core'
 import type { GovcoreDb } from '@govcore/schema'
 import type { TenantActionContext, TenantActionOptions } from '@govcore/server'
@@ -34,11 +34,24 @@ export interface GenerateContentActionsOptions {
   permissions?: ContentActionPermissions
 }
 
+/** One page of list results: the slice plus the unpaginated total (for the count/last-page math). */
+export interface ContentPage {
+  rows: Row[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+const DEFAULT_PAGE_SIZE = 25
+const MAX_PAGE_SIZE = 100
+
 export interface ContentActions {
   create: (input: Row) => Promise<Row>
   update: (input: { id: string; values: Row }) => Promise<Row | null>
   get: (input: { id: string }) => Promise<Row | null>
   list: (input?: void) => Promise<Row[]>
+  /** A single page of rows plus the total count — for a paginated list view. */
+  listPage: (input: { page?: number; pageSize?: number }) => Promise<ContentPage>
   remove: (input: { id: string }) => Promise<void>
   publish: (input: { id: string }) => Promise<Row>
   archive: (input: { id: string }) => Promise<Row>
@@ -89,6 +102,19 @@ export function generateContentActions(
     return (await db.select().from(table)) as Row[]
   })
 
+  const listPage = tenantAction<{ page?: number; pageSize?: number }, ContentPage>(
+    {},
+    async ({ db }, input) => {
+      // Clamp the same way nextkit's parsePageParams does: a bad page/pageSize
+      // can never produce a negative offset or an unbounded query.
+      const page = Math.max(1, Math.trunc(input?.page ?? 1) || 1)
+      const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, Math.trunc(input?.pageSize ?? DEFAULT_PAGE_SIZE) || DEFAULT_PAGE_SIZE))
+      const rows = (await db.select().from(table).limit(pageSize).offset((page - 1) * pageSize)) as Row[]
+      const [totals] = await db.select({ c: count() }).from(table)
+      return { rows, total: Number(totals?.c ?? 0), page, pageSize }
+    },
+  )
+
   const remove = tenantAction<{ id: string }, void>(
     { permission: perms.remove },
     async ({ ctx, db }, { id }) => {
@@ -105,5 +131,5 @@ export function generateContentActions(
     return transition(db, table, def, { id, to: 'archived' })
   })
 
-  return { create, update, get, list, remove, publish, archive }
+  return { create, update, get, list, listPage, remove, publish, archive }
 }

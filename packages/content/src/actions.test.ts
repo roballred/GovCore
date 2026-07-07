@@ -21,7 +21,7 @@ describe('generateContentActions', () => {
     const { tenantAction } = recordingTenantAction()
     const actions = generateContentActions(tenantAction, note, table)
     expect(Object.keys(actions).sort()).toEqual(
-      ['archive', 'create', 'get', 'list', 'publish', 'remove', 'update'].sort(),
+      ['archive', 'create', 'get', 'list', 'listPage', 'publish', 'remove', 'update'].sort(),
     )
     for (const fn of Object.values(actions)) expect(typeof fn).toBe('function')
   })

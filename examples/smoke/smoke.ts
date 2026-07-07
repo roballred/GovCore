@@ -717,6 +717,16 @@ async function main() {
   check('content/action: create scopes org from context, applies materialized', created.organizationId === orgA.id && created.well_tagged === true)
   const listedIds = ((await articleActions.list()) as Array<{ id: string }>).map((r) => r.id)
   check('content/action: list is RLS-scoped and includes the new row', listedIds.includes(created.id))
+
+  // pagination (#72): listPage returns a bounded slice + the unpaginated total.
+  await articleActions.create({ title: 'Second', primary_tag_id: rel.t1.id })
+  const allCount = ((await articleActions.list()) as unknown[]).length
+  const pg1 = await articleActions.listPage({ page: 1, pageSize: 1 })
+  const pg2 = await articleActions.listPage({ page: 2, pageSize: 1 })
+  check('content/action: listPage bounds the slice + reports the full total', pg1.rows.length === 1 && pg1.total === allCount && pg1.pageSize === 1)
+  check('content/action: listPage offset advances to a different row', (pg2.rows[0] as { id: string })?.id !== (pg1.rows[0] as { id: string })?.id)
+  check('content/action: listPage clamps an oversized pageSize', (await articleActions.listPage({ pageSize: 99999 })).pageSize === 100)
+
   const pub = (await articleActions.publish({ id: created.id })) as { status: string }
   check('content/action: publish runs the lifecycle gate + hook', pub.status === 'published')
   const got = (await articleActions.get({ id: created.id })) as { status: string }
