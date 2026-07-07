@@ -1,6 +1,6 @@
 {
   "name": "@govcore/middleware",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Edge-safe Next.js middleware factory: read-only session decode, resurrection guard, instance/maintenance gating",
   "type": "module",
   "main": "./src/index.ts",
