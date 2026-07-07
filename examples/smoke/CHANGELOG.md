@@ -1,5 +1,12 @@
 # @govcore/example-smoke
 
+## 0.0.9
+
+### Patch Changes
+
+- Updated dependencies [9f85ca0]
+  - @govcore/content@0.3.0
+
 ## 0.0.8
 
 ### Patch Changes
