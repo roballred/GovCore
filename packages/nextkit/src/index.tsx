@@ -158,6 +158,114 @@ export function Badge({ children, tone = 'default' }: { children: ReactNode; ton
   )
 }
 
+// ── Pagination ────────────────────────────────────────────────────────────────
+//
+// Server-driven, App-Router-friendly: the page reads its slice from the URL
+// (`parsePageParams`), fetches exactly that slice (LIMIT/OFFSET) plus a total,
+// and hands DataTable a `pagination` prop. The controls are plain links — no
+// client JS — so pagination works in a Server Component with nothing hydrated.
+
+export const DEFAULT_PAGE_SIZE = 25
+const MAX_PAGE_SIZE = 100
+
+/** A resolved page slice. `offset` is `(page-1)*pageSize`, ready for LIMIT/OFFSET. */
+export interface PageParams {
+  page: number
+  pageSize: number
+  offset: number
+}
+
+function toInt(v: string | undefined, fallback: number): number {
+  const n = Number.parseInt(v ?? '', 10)
+  return Number.isFinite(n) && n > 0 ? n : fallback
+}
+
+/**
+ * Parse `page`/`pageSize` from App Router `searchParams` (a plain object or a
+ * `URLSearchParams`). Page is clamped to ≥1 and pageSize to `[1, maxPageSize]`;
+ * missing/garbage values fall back to defaults — so a hand-edited URL can never
+ * produce a negative offset or an unbounded query.
+ */
+export function parsePageParams(
+  searchParams?: Record<string, string | string[] | undefined> | URLSearchParams,
+  opts?: { defaultPageSize?: number; maxPageSize?: number },
+): PageParams {
+  const read = (k: string): string | undefined => {
+    if (!searchParams) return undefined
+    if (searchParams instanceof URLSearchParams) return searchParams.get(k) ?? undefined
+    const v = searchParams[k]
+    return Array.isArray(v) ? v[0] : v
+  }
+  const maxPageSize = opts?.maxPageSize ?? MAX_PAGE_SIZE
+  const page = toInt(read('page'), 1)
+  const pageSize = Math.min(maxPageSize, toInt(read('pageSize'), opts?.defaultPageSize ?? DEFAULT_PAGE_SIZE))
+  return { page, pageSize, offset: (page - 1) * pageSize }
+}
+
+/**
+ * Build the href for a target page, preserving the other query params (filters,
+ * pageSize) already on the URL. Use as `hrefForPage` on the pagination prop.
+ */
+export function pageHref(
+  pathname: string,
+  searchParams: Record<string, string | string[] | undefined> | URLSearchParams | undefined,
+  page: number,
+): string {
+  const params = new URLSearchParams()
+  if (searchParams instanceof URLSearchParams) {
+    searchParams.forEach((v, k) => params.set(k, v))
+  } else if (searchParams) {
+    for (const [k, v] of Object.entries(searchParams)) {
+      if (v != null) params.set(k, Array.isArray(v) ? (v[0] ?? '') : v)
+    }
+  }
+  params.set('page', String(page))
+  const qs = params.toString()
+  return qs ? `${pathname}?${qs}` : pathname
+}
+
+export interface PaginationProps {
+  page: number
+  pageSize: number
+  total: number
+  /** Build the href for a target page — typically `pageHref.bind(null, pathname, searchParams)`. */
+  hrefForPage: (page: number) => string
+}
+
+function PageLink({ href, disabled, children }: { href: string; disabled: boolean; children: ReactNode }) {
+  if (disabled) {
+    return <span className="rounded-md px-2 py-1 text-muted-foreground/50">{children}</span>
+  }
+  return (
+    <a href={href} className="rounded-md px-2 py-1 text-foreground hover:bg-muted">
+      {children}
+    </a>
+  )
+}
+
+/** The prev/next + count footer. Rendered by DataTable when `pagination` is set. */
+export function TablePagination({ page, pageSize, total, hrefForPage }: PaginationProps) {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  const from = total === 0 ? 0 : (page - 1) * pageSize + 1
+  const to = Math.min(total, page * pageSize)
+  return (
+    <div className="flex items-center justify-between border-t border-border px-4 py-2 text-sm text-muted-foreground">
+      <span>{total === 0 ? 'No results' : `Showing ${from}–${to} of ${total}`}</span>
+      <div className="flex items-center gap-1">
+        <PageLink href={hrefForPage(page - 1)} disabled={page <= 1}>
+          ← Previous
+        </PageLink>
+        <span className="px-2">
+          Page {page} of {totalPages}
+        </span>
+        <PageLink href={hrefForPage(page + 1)} disabled={page >= totalPages}>
+          Next →
+        </PageLink>
+      </div>
+    </div>
+  )
+}
+
 // ── Data table ──────────────────────────────────────────────────────────────
 
 export interface Column<Row> {
@@ -171,10 +279,13 @@ export function DataTable<Row extends Record<string, unknown>>({
   columns,
   rows,
   empty = 'No rows.',
+  pagination,
 }: {
   columns: Column<Row>[]
   rows: Row[]
   empty?: string
+  /** When set, renders a server-driven prev/next + count footer below the table. */
+  pagination?: PaginationProps
 }) {
   return (
     <div className="overflow-hidden rounded-lg border border-border">
@@ -208,6 +319,7 @@ export function DataTable<Row extends Record<string, unknown>>({
           )}
         </tbody>
       </table>
+      {pagination ? <TablePagination {...pagination} /> : null}
     </div>
   )
 }

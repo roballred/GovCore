@@ -12,7 +12,7 @@
 // server-only consumers (generated actions, the compiler) never pull in React.
 
 import type { ReactNode } from 'react'
-import { Badge, DataTable, PageHeader, type Column } from '@govcore/nextkit'
+import { Badge, DataTable, PageHeader, type Column, type PaginationProps } from '@govcore/nextkit'
 import {
   isLinkField,
   isReferenceField,
@@ -203,6 +203,7 @@ export function ContentListScreen({
   title,
   description,
   references,
+  pagination,
 }: {
   def: ContentTypeDefinition
   rows: Row[]
@@ -210,12 +211,19 @@ export function ContentListScreen({
   title?: string
   description?: string
   references?: ReferenceDisplayMap
+  /** Pass through from `listPage` + `parsePageParams` to paginate the list. */
+  pagination?: PaginationProps
 }) {
   const label = title ?? def.label ?? humanize(def.name)
   return (
     <div>
       <PageHeader title={label} description={description} />
-      <DataTable columns={contentColumns(def, { basePath, references })} rows={rows} empty={`No ${label.toLowerCase()} yet.`} />
+      <DataTable
+        columns={contentColumns(def, { basePath, references })}
+        rows={rows}
+        empty={`No ${label.toLowerCase()} yet.`}
+        pagination={pagination}
+      />
     </div>
   )
 }
