@@ -352,7 +352,20 @@ async function main() {
   check('RLS: orgA context sees only userA', aRows.length === 1 && aRows[0].id === userA.id, `(${aRows.length})`)
   check('RLS: orgB context sees only userB', bRows.length === 1 && bRows[0].id === userB.id, `(${bRows.length})`)
   check('RLS: no org context (deny by default) sees 0 users', noCtx === 0, `(${noCtx})`)
+
+  // 8b. the createAuth login wall (#57): a credentials login looks up the user
+  // by email BEFORE any session/org context exists. On the runtime pool that
+  // lookup is RLS-filtered to nothing — the CredentialsSignin every consumer
+  // hits. A superuser/BYPASSRLS authDb pool is what makes it work (FORCE RLS
+  // binds even the owner, so owner alone is not enough).
+  const loginOnRuntime = (await app.db.select().from(users).where(eq(users.email, userA.email))).length
+  check('login wall: runtime pool finds 0 users by email (no GUC) — the #57 failure', loginOnRuntime === 0, `(${loginOnRuntime})`)
   await app.close()
+
+  const authPlane = createTestDb(smokeUrl) // DATABASE_URL superuser — bypasses FORCE RLS, like authDb
+  const loginOnAuthDb = (await authPlane.db.select().from(users).where(eq(users.email, userA.email))).length
+  check('login wall fix: authDb pool finds the user by email pre-session', loginOnAuthDb === 1, `(${loginOnAuthDb})`)
+  await authPlane.close()
 
   // 9. support: break-glass + act-as lifecycle (instance-level; not RLS-bound)
   console.log('• support: break-glass + act-as')
