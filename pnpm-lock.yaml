@@ -353,6 +353,9 @@ importers:
 
   packages/tenancy:
     dependencies:
+      '@govcore/audit':
+        specifier: workspace:*
+        version: link:../audit
       '@govcore/schema':
         specifier: workspace:*
         version: link:../schema

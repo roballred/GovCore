@@ -191,6 +191,8 @@ export {
 export type { PasswordPolicy, PasswordValidationResult } from './password'
 export { changePassword, adminResetPassword } from './password-flows'
 export type { PasswordChangeResult, PasswordResetResult } from './password-flows'
+export { provisionUser } from './provisioning'
+export type { ProvisionUserResult } from './provisioning'
 export { checkSsoProvisioning } from './sso-guard'
 export type { SsoCheckResult } from './sso-guard'
 export {

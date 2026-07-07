@@ -19,6 +19,7 @@
     "access": "public"
   },
   "dependencies": {
+    "@govcore/audit": "workspace:*",
     "@govcore/schema": "workspace:*",
     "drizzle-orm": "^0.45.2"
   },
