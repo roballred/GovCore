@@ -24,10 +24,15 @@ import {
   withTenant,
 } from '@govcore/testing'
 import {
+  actAsStatus,
   approveBreakGlass,
+  breakGlassStatus,
   getActiveActAsSession,
   getUnlockedOrgIds,
   grantBreakGlass,
+  listActAsSessions,
+  listBreakGlassSessions,
+  orgHasSupportHistory,
   requireActAs,
   requireBreakGlass,
   revokeBreakGlass,
@@ -305,6 +310,29 @@ async function main() {
   await revokeBreakGlass(sup.db, { sessionId: bg.id, instanceAdminId: userA.id })
   check('after parent revoke: act-as read ends + returns null', !!aa && (await getActiveActAsSession(sup.db, aa.id)) === null)
   check('after parent revoke: requireBreakGlass denies', (await requireBreakGlass(sup.db, userA.id, orgB.id)) === null)
+
+  // 9b. read + status layer (#67): operator view, tenant-scoped view, status derivation
+  const opBg = await listBreakGlassSessions(sup.db)
+  check('listBreakGlassSessions (operator view) sees the session', opBg.some((r) => r.id === bg.id))
+  const orgBBg = await listBreakGlassSessions(sup.db, { targetOrgId: orgB.id })
+  check(
+    'listBreakGlassSessions (tenant-scoped) returns only orgB sessions',
+    orgBBg.length >= 1 && orgBBg.every((r) => r.targetOrgId === orgB.id),
+  )
+  check(
+    'tenant visibility: orgA (untouched) has no break-glass sessions',
+    (await listBreakGlassSessions(sup.db, { targetOrgId: orgA.id })).length === 0,
+  )
+  const revokedRow = orgBBg.find((r) => r.id === bg.id)!
+  check('breakGlassStatus reflects the revocation', breakGlassStatus(revokedRow) === 'revoked')
+  const orgBAa = await listActAsSessions(sup.db, { targetOrgId: orgB.id })
+  const endedAa = orgBAa.find((r) => !!aa && r.id === aa.id)!
+  check('actAsStatus is "ended" after the parent was revoked', actAsStatus(endedAa) === 'ended')
+  check(
+    'orgHasSupportHistory: true for the accessed org, false for the untouched one',
+    (await orgHasSupportHistory(sup.db, orgB.id)) === true &&
+      (await orgHasSupportHistory(sup.db, orgA.id)) === false,
+  )
   await sup.close()
 
   // 10. federation: org connections + federated visibility

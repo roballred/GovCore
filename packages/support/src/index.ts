@@ -7,3 +7,4 @@
 
 export * from './break-glass'
 export * from './act-as'
+export * from './views'
