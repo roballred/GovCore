@@ -3,17 +3,17 @@
   "version": "0.2.1",
   "description": "Cross-organization connections and federated-visibility query helpers",
   "type": "module",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
-      "default": "./src/index.ts"
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "dev": "tsc -p tsconfig.json --watch"
+    "build": "tsup",
+    "dev": "tsup --watch"
   },
   "publishConfig": {
     "access": "public"
@@ -24,6 +24,22 @@
     "drizzle-orm": "^0.45.2"
   },
   "devDependencies": {
-    "typescript": "^5.5.0"
+    "typescript": "^5.5.0",
+    "tsup": "^8.3.0"
+  },
+  "module": "./dist/index.js",
+  "files": [
+    "dist"
+  ],
+  "tsup": {
+    "entry": [
+      "src/index.ts"
+    ],
+    "format": [
+      "esm"
+    ],
+    "dts": true,
+    "clean": true,
+    "sourcemap": true
   }
 }

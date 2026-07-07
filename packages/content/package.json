@@ -3,21 +3,21 @@
   "version": "0.2.1",
   "description": "Content engine: compile content-type definitions into real Drizzle tables + migrations",
   "type": "module",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
-      "default": "./src/index.ts"
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
     },
     "./screens": {
-      "types": "./src/screens.tsx",
-      "default": "./src/screens.tsx"
+      "types": "./dist/screens.d.ts",
+      "default": "./dist/screens.js"
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "dev": "tsc -p tsconfig.json --watch"
+    "build": "tsup",
+    "dev": "tsup --watch"
   },
   "publishConfig": {
     "access": "public"
@@ -40,6 +40,23 @@
     "@types/react": "^19.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "typescript": "^5.5.0"
+    "typescript": "^5.5.0",
+    "tsup": "^8.3.0"
+  },
+  "module": "./dist/index.js",
+  "files": [
+    "dist"
+  ],
+  "tsup": {
+    "entry": [
+      "src/index.ts",
+      "src/screens.tsx"
+    ],
+    "format": [
+      "esm"
+    ],
+    "dts": true,
+    "clean": true,
+    "sourcemap": true
   }
 }

@@ -45,11 +45,16 @@ jobs:
           node-version: 20
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # §576: the minimal-app is the canary — "does a real consumer still
-      # compile?". It exercises auth, tenancy, RBAC, middleware, the theme, and
-      # the content engine (a `note` type → generated actions + screens). The
-      # build connects to nothing (dynamic pages); the dummy URL just satisfies
-      # the lazy postgres client at module load.
+      # Packages ship compiled dist/ now — build them so the consumer resolves
+      # the published artifacts (not source), which is what makes the no-config
+      # consume real.
+      - run: pnpm build --filter='./packages/*'
+      # §576 + #71: the minimal-app is the canary — "does a real consumer still
+      # compile, with NO transpilePackages and no build config?". It exercises
+      # auth, tenancy, RBAC, middleware, the theme, and the content engine (a
+      # `note` type → generated actions + screens). The build connects to
+      # nothing (dynamic pages); the dummy URL just satisfies the lazy postgres
+      # client at module load.
       - run: pnpm --filter @govcore/example-minimal-app build
         env:
           DATABASE_URL: postgresql://localhost:5432/build
@@ -79,6 +84,9 @@ jobs:
           node-version: 20
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # Packages ship compiled dist/ now — build them so tsx resolves the
+      # compiled entrypoints (schema/migrate, content/screens, etc.).
+      - run: pnpm build --filter='./packages/*'
       # Drives examples/smoke: govcore-migrate, rbac/tenancy/audit, the
       # audit-immutability trigger, and RLS cross-org isolation under a
       # non-owner role — the highest-risk paths that need a real Postgres.

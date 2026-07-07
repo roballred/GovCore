@@ -3,25 +3,25 @@
   "version": "0.2.0",
   "description": "Auth.js config factory (createAuth): credentials + injected OIDC, SSO guard, active-membership session, login/logout audit",
   "type": "module",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
-      "default": "./src/index.ts"
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
     },
     "./logout-marker": {
-      "types": "./src/logout-marker.ts",
-      "default": "./src/logout-marker.ts"
+      "types": "./dist/logout-marker.d.ts",
+      "default": "./dist/logout-marker.js"
     },
     "./password": {
-      "types": "./src/password.ts",
-      "default": "./src/password.ts"
+      "types": "./dist/password.d.ts",
+      "default": "./dist/password.js"
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "dev": "tsc -p tsconfig.json --watch"
+    "build": "tsup",
+    "dev": "tsup --watch"
   },
   "publishConfig": {
     "access": "public"
@@ -45,6 +45,24 @@
     "@types/react": "^19.0.0",
     "next": "^15.5.0",
     "react": "^19.0.0",
-    "typescript": "^5.5.0"
+    "typescript": "^5.5.0",
+    "tsup": "^8.3.0"
+  },
+  "module": "./dist/index.js",
+  "files": [
+    "dist"
+  ],
+  "tsup": {
+    "entry": [
+      "src/index.ts",
+      "src/logout-marker.ts",
+      "src/password.ts"
+    ],
+    "format": [
+      "esm"
+    ],
+    "dts": true,
+    "clean": true,
+    "sourcemap": true
   }
 }

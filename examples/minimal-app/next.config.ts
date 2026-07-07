@@ -1,19 +1,7 @@
 import type { NextConfig } from 'next'
 
-const nextConfig: NextConfig = {
-  // The @govcore/* packages are source-first TS — Next must transpile them.
-  transpilePackages: [
-    '@govcore/schema',
-    '@govcore/rbac',
-    '@govcore/audit',
-    '@govcore/tenancy',
-    '@govcore/auth',
-    '@govcore/middleware',
-    '@govcore/server',
-    '@govcore/theme',
-    '@govcore/nextkit',
-    '@govcore/content',
-  ],
-}
+// The @govcore/* packages ship compiled ESM + types (dist/), so a consumer
+// needs no `transpilePackages` and no build config — that's what #71 delivers.
+const nextConfig: NextConfig = {}
 
 export default nextConfig
