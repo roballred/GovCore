@@ -30,6 +30,7 @@
   /* Brand surface (allowlisted) */
   --header-bg: 221 56% 22%;
   --header-fg: 214 40% 93%;
+  --header-border: 221 56% 30%;
 
   --radius: 0.5rem;
 }
@@ -56,6 +57,7 @@
 
   --header-bg: 222 47% 9%;
   --header-fg: 210 40% 92%;
+  --header-border: 222 47% 16%;
 }
 
 /* Visible focus ring everywhere (WCAG 2.4.7) — apps may restyle but not remove. */

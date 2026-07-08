@@ -7,7 +7,12 @@
 // every consumer otherwise rebuilds (#58).
 
 import type { ReactNode } from 'react'
-import { themeToCss, type ThemeDefinition } from '@govcore/theme'
+import {
+  themeToCss,
+  DARK_STORAGE_KEY,
+  THEME_STORAGE_KEY,
+  type ThemeDefinition,
+} from '@govcore/theme'
 
 function cx(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(' ')
@@ -119,6 +124,26 @@ export function InstanceConsoleShell({
  */
 export function ThemeStyle({ theme, selector }: { theme: ThemeDefinition; selector?: string }) {
   return <style dangerouslySetInnerHTML={{ __html: themeToCss(theme, selector) }} />
+}
+
+/**
+ * Restore the saved brand theme + dark mode on <html> **before first paint** so
+ * a reload never flashes the default theme. Render it in the document <head>
+ * (Next: in the root layout's <head>) ahead of the app. Pairs with the
+ * `ThemeSelector`/`DarkModeToggle` from `@govcore/nextkit/theming`, which write
+ * the same localStorage keys. The script is a fixed string over internal key
+ * constants — no interpolation of untrusted input.
+ */
+export function ThemeInitScript() {
+  const js =
+    `(function(){try{` +
+    `var t=localStorage.getItem(${JSON.stringify(THEME_STORAGE_KEY)});` +
+    `if(t)document.documentElement.setAttribute('data-theme',t);` +
+    `var d=localStorage.getItem(${JSON.stringify(DARK_STORAGE_KEY)});` +
+    `var dark=d?d==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;` +
+    `document.documentElement.classList.toggle('dark',dark);` +
+    `}catch(e){}})();`
+  return <script dangerouslySetInnerHTML={{ __html: js }} />
 }
 
 // ── Primitives ──────────────────────────────────────────────────────────────
