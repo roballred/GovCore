@@ -22,6 +22,34 @@ export interface NavItem {
   active?: boolean
 }
 
+/** A sidebar section: a labeled, collapsible group of nav items. */
+export interface NavGroup {
+  label: string
+  items: NavItem[]
+  /**
+   * Render this group expanded on load. Presentational, like `active`: the
+   * consumer sets it (typically for the group containing the current route) so
+   * the active section is open without any client JS.
+   */
+  defaultOpen?: boolean
+}
+
+/** Shared item-link styling for the flat and grouped sidebars. */
+function navLinkClass(active?: boolean): string {
+  return cx(
+    'block rounded-md px-3 py-2 text-sm',
+    active ? 'bg-primary text-primary-foreground' : 'text-foreground hover:bg-muted',
+  )
+}
+
+function NavLink({ item }: { item: NavItem }) {
+  return (
+    <a href={item.href} aria-current={item.active ? 'page' : undefined} className={navLinkClass(item.active)}>
+      {item.label}
+    </a>
+  )
+}
+
 /**
  * The left sidebar nav list. Presentational: `active` is computed by the
  * consumer (a ~5-line client wrapper on `usePathname` keeps this package free
@@ -33,18 +61,7 @@ export function SideNav({ items, ariaLabel = 'Primary' }: { items: NavItem[]; ar
       <ul className="space-y-1">
         {items.map((item) => (
           <li key={item.href}>
-            <a
-              href={item.href}
-              aria-current={item.active ? 'page' : undefined}
-              className={cx(
-                'block rounded-md px-3 py-2 text-sm',
-                item.active
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-foreground hover:bg-muted',
-              )}
-            >
-              {item.label}
-            </a>
+            <NavLink item={item} />
           </li>
         ))}
       </ul>
@@ -53,10 +70,61 @@ export function SideNav({ items, ariaLabel = 'Primary' }: { items: NavItem[]; ar
 }
 
 /**
+ * The grouped sidebar: collapsible sections over the same items as SideNav.
+ * Presentational and client-hook-free — collapsing uses a native `<details>`
+ * exclusive accordion (all groups share a `name`, so opening one closes the
+ * others), and the consumer marks the current section `defaultOpen`. Role- and
+ * module-gating are the consumer's job too: filter groups/items before passing
+ * them in (as the flat SideNav expects `active` pre-computed).
+ */
+export function GroupedSideNav({ groups, ariaLabel = 'Primary' }: { groups: NavGroup[]; ariaLabel?: string }) {
+  const accordionName = `${ariaLabel.replace(/\s+/g, '-').toLowerCase()}-nav`
+  return (
+    <nav aria-label={ariaLabel} className="w-48 shrink-0 space-y-1">
+      {groups.map((group) => (
+        <details
+          key={group.label}
+          name={accordionName}
+          open={group.defaultOpen}
+          className="[&[open]_.nav-chevron]:rotate-90"
+        >
+          <summary className="flex cursor-pointer list-none items-center justify-between rounded-md px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:bg-muted [&::-webkit-details-marker]:hidden">
+            <span>{group.label}</span>
+            <svg
+              className="nav-chevron h-3.5 w-3.5 shrink-0 transition-transform"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+              aria-hidden="true"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          </summary>
+          <ul className="mt-1 space-y-1 pl-2">
+            {group.items.map((item) => (
+              <li key={item.href}>
+                <NavLink item={item} />
+              </li>
+            ))}
+          </ul>
+        </details>
+      ))}
+    </nav>
+  )
+}
+
+/** True when `nav` is a NavGroup[] (has grouped sections) rather than a flat NavItem[]. */
+function isNavGroups(nav: NavItem[] | NavGroup[]): nav is NavGroup[] {
+  return nav.length > 0 && 'items' in nav[0]
+}
+
+/**
  * The product-plane app shell: branded header (`--header-bg`/`--header-fg`
- * tokens), left SideNav, main content. `nav` may be a NavItem[] (rendered via
- * SideNav) or a ReactNode (e.g. a consumer's client nav wrapper); `actions` is
- * a header slot for sign-out forms and the like.
+ * tokens), left sidebar, main content. `nav` may be a flat `NavItem[]` (→
+ * SideNav), a grouped `NavGroup[]` (→ GroupedSideNav), or a ReactNode (e.g. a
+ * consumer's client nav wrapper); `actions` is a header slot for sign-out forms
+ * and the like.
  */
 export function AppShell({
   title,
@@ -67,7 +135,7 @@ export function AppShell({
   children,
 }: {
   title: ReactNode
-  nav: NavItem[] | ReactNode
+  nav: NavItem[] | NavGroup[] | ReactNode
   navAriaLabel?: string
   user?: { name?: string | null; email?: string | null }
   actions?: ReactNode
@@ -85,7 +153,15 @@ export function AppShell({
         </div>
       </header>
       <div className="mx-auto flex max-w-6xl gap-8 px-6 py-8">
-        {Array.isArray(nav) ? <SideNav items={nav} ariaLabel={navAriaLabel} /> : nav}
+        {Array.isArray(nav) ? (
+          isNavGroups(nav) ? (
+            <GroupedSideNav groups={nav} ariaLabel={navAriaLabel} />
+          ) : (
+            <SideNav items={nav} ariaLabel={navAriaLabel} />
+          )
+        ) : (
+          nav
+        )}
         <main className="min-w-0 flex-1">{children}</main>
       </div>
     </div>
