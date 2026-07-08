@@ -1,6 +1,6 @@
 {
   "name": "@govcore/setup",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "First-run bootstrap: runtime-role provisioning + first org/admin, idempotent",
   "type": "module",
   "main": "./dist/index.js",
