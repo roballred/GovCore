@@ -81,6 +81,7 @@ import {
 } from '@govcore/content'
 import { contentColumns } from '@govcore/content/screens'
 import { createTenantActions } from '@govcore/server'
+import { bootstrap, provisionRuntimeRole } from '@govcore/setup'
 import { application, capability, capabilityCompleteness, person } from './capability'
 
 const BASE = process.env.DATABASE_URL
@@ -131,6 +132,35 @@ async function main() {
   console.log('• govcore-migrate')
   const { applied } = await migrate({ connectionString: smokeUrl, log: (m) => console.log(`  ${m}`) })
   check('migrations applied', applied.length >= 1, `(applied ${applied.length})`)
+
+  // 2b. first-run bootstrap (#68): on the empty instance, create the first org +
+  // instance-admin; a second run refuses. Owner-run — the first user insert
+  // predates any tenant GUC, which the runtime role's FORCE-RLS would reject.
+  const bootPool = createTestDb(smokeUrl)
+  const boot = await bootstrap(bootPool.db, {
+    organization: { name: 'Bootstrap Org' },
+    admin: { email: 'root@bootstrap.example', name: 'Root Admin', password: 'bootstrap-pw-1' },
+  })
+  check('bootstrap: creates the first org + instance-admin on an empty instance', boot.ok, JSON.stringify(boot))
+  if (boot.ok) {
+    const [adminRow] = await bootPool.db.select().from(users).where(eq(users.id, boot.adminUserId))
+    check('bootstrap: the first admin is an instance_admin', adminRow?.instanceRole === 'instance_admin')
+    const bootActive = await resolveActiveMembership(bootPool.db, boot.adminUserId)
+    check(
+      'bootstrap: the admin resolves to the new org via its membership',
+      bootActive?.organizationId === boot.organizationId && bootActive?.role === 'admin',
+    )
+  }
+  const bootAgain = await bootstrap(bootPool.db, {
+    organization: { name: 'Second Org' },
+    admin: { email: 'x@y.example', password: 'another-pw-99' },
+  })
+  check(
+    'bootstrap: refuses on a non-empty instance',
+    !bootAgain.ok && (bootAgain as { reason?: string }).reason === 'already-bootstrapped',
+    JSON.stringify(bootAgain),
+  )
+  await bootPool.close()
 
   // 3. seed (as owner/superuser — bypasses RLS, which is fine for seeding)
   const owner = createTestDb(smokeUrl)
@@ -339,14 +369,9 @@ async function main() {
   check('audit_log UPDATE blocked by trigger', blocked)
   await owner.close()
 
-  // 8. RLS isolation under a NON-owner role
-  const s = postgres(smokeUrl, { max: 1 })
-  await s.unsafe(
-    `DO $$ BEGIN CREATE ROLE ${APP_ROLE} LOGIN PASSWORD '${APP_PW}'; EXCEPTION WHEN duplicate_object THEN NULL; END $$;`,
-  )
-  await s.unsafe(`GRANT USAGE ON SCHEMA govcore TO ${APP_ROLE}`)
-  await s.unsafe(`GRANT SELECT, INSERT ON ALL TABLES IN SCHEMA govcore TO ${APP_ROLE}`)
-  await s.end()
+  // 8. RLS isolation under a NON-owner role. The role + grants are provisioned by
+  // @govcore/setup (#68) — the RLS assertions below then validate those grants.
+  await provisionRuntimeRole({ connectionString: smokeUrl, role: APP_ROLE, password: APP_PW })
 
   const app = createTestDb(withCreds(smokeUrl, APP_ROLE, APP_PW))
   const aRows = await withTenant(app.db, orgA.id, (tx) => tx.select().from(users))
