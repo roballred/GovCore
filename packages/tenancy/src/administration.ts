@@ -20,6 +20,7 @@ import {
   isUniqueViolation,
   type GovcoreDb,
   type Organization,
+  type OrganizationStatus,
 } from '@govcore/schema'
 import { writeAuditLog } from '@govcore/audit'
 import { assertNotLastActiveAdmin, LastActiveAdminError } from './guards'
@@ -208,4 +209,103 @@ export async function updateUserAdministration(
     throw err
   }
   return { ok: true }
+}
+
+export type OrganizationLifecycleResult = { ok: true } | { ok: false; reason: 'not-found' }
+
+/**
+ * Shared writer for the lifecycle transitions. Stamps `status` + reason + who/when
+ * and audits the before/after. Enforcement of the new status (block sessions and
+ * tenant transactions on a non-active org) lives at the createAuth and
+ * tenantAction gates — this only records the transition.
+ */
+async function setOrganizationStatus(
+  db: GovcoreDb,
+  opts: {
+    organizationId: string
+    status: OrganizationStatus
+    reason: string | null
+    actorUserId: string
+    action: string
+  },
+): Promise<OrganizationLifecycleResult> {
+  const [before] = await db
+    .select()
+    .from(organizations)
+    .where(eq(organizations.id, opts.organizationId))
+  if (!before) return { ok: false, reason: 'not-found' }
+
+  await db.transaction(async (tx) => {
+    await tx
+      .update(organizations)
+      .set({
+        status: opts.status,
+        statusReason: opts.reason,
+        statusChangedAt: new Date(),
+        statusChangedBy: opts.actorUserId,
+        updatedAt: new Date(),
+      })
+      .where(eq(organizations.id, opts.organizationId))
+    await writeAuditLog(tx, {
+      action: opts.action,
+      entityType: 'organization',
+      entityId: opts.organizationId,
+      organizationId: opts.organizationId,
+      userId: opts.actorUserId,
+      before: { status: before.status },
+      after: { status: opts.status, reason: opts.reason },
+    })
+  })
+  return { ok: true }
+}
+
+/**
+ * Suspend an organization: block its users from signing in and its tenant
+ * transactions from running, without destroying data. Audited as
+ * `platform.org.suspend`. Reverse with {@link reinstateOrganization}.
+ */
+export function suspendOrganization(
+  db: GovcoreDb,
+  opts: { organizationId: string; reason: string; actorUserId: string },
+): Promise<OrganizationLifecycleResult> {
+  return setOrganizationStatus(db, {
+    organizationId: opts.organizationId,
+    status: 'suspended',
+    reason: opts.reason.trim() || null,
+    actorUserId: opts.actorUserId,
+    action: 'platform.org.suspend',
+  })
+}
+
+/** Return a suspended (or archived) organization to `active`. Audited as `platform.org.reinstate`. */
+export function reinstateOrganization(
+  db: GovcoreDb,
+  opts: { organizationId: string; actorUserId: string },
+): Promise<OrganizationLifecycleResult> {
+  return setOrganizationStatus(db, {
+    organizationId: opts.organizationId,
+    status: 'active',
+    reason: null,
+    actorUserId: opts.actorUserId,
+    action: 'platform.org.reinstate',
+  })
+}
+
+/**
+ * Archive (soft-delete) an organization: excluded from tenant access like a
+ * suspension, but semantically retired. Data is retained — a hard delete is a
+ * `@govcore/backup` export-then-purge concern, not modeled here. Audited as
+ * `platform.org.archive`; reversible via {@link reinstateOrganization}.
+ */
+export function archiveOrganization(
+  db: GovcoreDb,
+  opts: { organizationId: string; reason?: string; actorUserId: string },
+): Promise<OrganizationLifecycleResult> {
+  return setOrganizationStatus(db, {
+    organizationId: opts.organizationId,
+    status: 'archived',
+    reason: opts.reason?.trim() || null,
+    actorUserId: opts.actorUserId,
+    action: 'platform.org.archive',
+  })
 }

@@ -10,8 +10,8 @@
 // The app builds its own typed `tenantAction` once via createTenantActions,
 // injecting its db, its session→context resolver, and its rbac instance.
 
-import { sql } from 'drizzle-orm'
-import { type GovcoreDb } from '@govcore/schema'
+import { eq, sql } from 'drizzle-orm'
+import { organizations, isOrganizationActive, type GovcoreDb } from '@govcore/schema'
 import { writeAuditLog, type AuditEvent } from '@govcore/audit'
 
 /** The trusted, server-resolved identity of the current actor. */
@@ -43,6 +43,12 @@ export interface CreateTenantActionsConfig {
   onUnauthorized?: () => never
   /** Called when the permission check fails. Default: throws Error('Forbidden'). */
   onForbidden?: () => never
+  /**
+   * Called when the active org is not `active` (suspended/archived) — the org
+   * lifecycle gate. Receives the blocking status so the app can route to a
+   * dedicated page. Default: throws Error(`Organization is <status>`).
+   */
+  onOrgInactive?: (status: string) => never
 }
 
 export type TenantActionHandler<I, O> = (
@@ -71,6 +77,19 @@ export function createTenantActions(config: CreateTenantActionsConfig) {
       if (!active) {
         if (config.onUnauthorized) return config.onUnauthorized()
         throw new Error('Unauthorized')
+      }
+
+      // Org lifecycle gate: a suspended/archived org runs no tenant transactions,
+      // regardless of the actor's permissions. `organizations` is not RLS-bound,
+      // so this reads on the runtime pool without a tenant GUC.
+      const [org] = await db
+        .select({ status: organizations.status })
+        .from(organizations)
+        .where(eq(organizations.id, active.organizationId))
+        .limit(1)
+      if (org && !isOrganizationActive(org.status)) {
+        if (config.onOrgInactive) return config.onOrgInactive(org.status)
+        throw new Error(`Organization is ${org.status}`)
       }
 
       if (options.permission) {

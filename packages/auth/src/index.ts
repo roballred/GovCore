@@ -13,9 +13,11 @@ import { DrizzleAdapter } from '@auth/drizzle-adapter'
 import { eq } from 'drizzle-orm'
 import {
   accounts,
+  organizations,
   sessions,
   users,
   verificationTokens,
+  isOrganizationActive,
   type GovcoreDb,
 } from '@govcore/schema'
 import { resolveActiveMembership } from '@govcore/tenancy'
@@ -65,6 +67,18 @@ export function createAuth(opts: CreateAuthOptions) {
   // tenant context, so it all uses the RLS-bypassing authDb when supplied.
   const db = opts.authDb ?? opts.db
   const defaultRole = opts.defaultRole ?? 'viewer'
+
+  // Org lifecycle gate: a session may not resolve for a suspended/archived org.
+  // `null` (no org resolved) is not blocked here — that is a membership concern.
+  const orgIsActive = async (orgId: string | null | undefined): Promise<boolean> => {
+    if (!orgId) return true
+    const [org] = await db
+      .select({ status: organizations.status })
+      .from(organizations)
+      .where(eq(organizations.id, orgId))
+      .limit(1)
+    return !org || isOrganizationActive(org.status)
+  }
 
   return NextAuth({
     session: { strategy: 'jwt', maxAge: opts.sessionMaxAgeSeconds ?? 60 * 60 * 24 },
@@ -136,6 +150,8 @@ export function createAuth(opts: CreateAuthOptions) {
           token.organizationId = active?.organizationId ?? dbUser?.organizationId ?? null
           token.instanceRole = dbUser?.instanceRole ?? null
           token.checkedAt = Date.now()
+          // Deny the session if the resolved org is suspended/archived.
+          if (!(await orgIsActive(token.organizationId))) return null
         } else if (token.id) {
           if (trigger === 'update') {
             // Explicit active-org switch — re-resolve server-authoritatively.
@@ -154,6 +170,8 @@ export function createAuth(opts: CreateAuthOptions) {
           if (Date.now() - lastCheck > CHECK_INTERVAL_MS) {
             const [dbUser] = await db.select().from(users).where(eq(users.id, token.id)).limit(1)
             if (!dbUser || !dbUser.isActive) return null
+            // Drop the session within the interval if the org was suspended/archived.
+            if (!(await orgIsActive(token.organizationId))) return null
             token.instanceRole = dbUser.instanceRole ?? null
             token.checkedAt = Date.now()
           }

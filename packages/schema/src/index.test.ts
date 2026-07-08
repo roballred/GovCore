@@ -1,5 +1,23 @@
 import { describe, expect, it } from 'vitest'
-import { isUniqueViolation } from './index'
+import { isUniqueViolation, isOrganizationActive, ORGANIZATION_STATUSES } from './index'
+
+describe('isOrganizationActive', () => {
+  it('is true only for the active status', () => {
+    expect(isOrganizationActive('active')).toBe(true)
+    expect(isOrganizationActive('suspended')).toBe(false)
+    expect(isOrganizationActive('archived')).toBe(false)
+  })
+
+  it('treats missing status as not active', () => {
+    expect(isOrganizationActive(null)).toBe(false)
+    expect(isOrganizationActive(undefined)).toBe(false)
+    expect(isOrganizationActive('')).toBe(false)
+  })
+
+  it('enumerates the three lifecycle states', () => {
+    expect([...ORGANIZATION_STATUSES]).toEqual(['active', 'suspended', 'archived'])
+  })
+})
 
 describe('isUniqueViolation', () => {
   it('detects a raw driver unique violation', () => {
