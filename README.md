@@ -6,6 +6,8 @@ GovCore packages the hardened "platform plane" that every serious multi-tenant S
 
 A comprehensive **content engine** (define a content type as data, get storage/validation/lifecycle/UI) — GovCore's second milestone — is built and proven end to end (see Status).
 
+> **Building an app on GovCore?** Start with the [**Consumer Guide**](./docs/consumer-guide.md) — day-one-to-first-login plus the invariants (RLS, the two-role split, `govcore-setup`) that fail in ways whose symptoms don't point at the cause.
+
 ## Status
 
 **Platform plane v1 implemented; GovEA cutover in progress.** This repository was seeded from the [GovEA](https://github.com/roballred/GovEA) codebase — GovEA is the app this platform plane was extracted *from*, and is GovCore's first consumer. All 14 `@govcore/*` packages are implemented and **published to npm at `0.x`** (Changesets `release.yml`, `workflow_dispatch`). The content engine (`@govcore/content`) is built and proven: definition→Drizzle compiler, relationships and computed fields, lifecycle hooks, generated CRUD `tenantAction`s and React screens, taxonomy, and recipes — exercised by the DB-backed `examples/smoke` suite in CI and dogfooded in `examples/minimal-app`.
