@@ -1,5 +1,13 @@
 # @govcore/federation
 
+## 0.2.3
+
+### Patch Changes
+
+- Updated dependencies [c9ae7c1]
+  - @govcore/schema@0.3.0
+  - @govcore/audit@0.1.3
+
 ## 0.2.2
 
 ### Patch Changes
