@@ -1,5 +1,11 @@
 # @govcore/middleware
 
+## 0.1.5
+
+### Patch Changes
+
+- @govcore/auth@0.4.1
+
 ## 0.1.4
 
 ### Patch Changes

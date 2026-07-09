@@ -1,5 +1,14 @@
 # @govcore/auth
 
+## 0.4.1
+
+### Patch Changes
+
+- Updated dependencies [f993e42]
+  - @govcore/schema@0.4.0
+  - @govcore/tenancy@0.3.1
+  - @govcore/audit@0.1.4
+
 ## 0.4.0
 
 ### Minor Changes

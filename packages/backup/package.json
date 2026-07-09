@@ -1,6 +1,6 @@
 {
   "name": "@govcore/backup",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Registration-based whole-tenant export/restore to JSON",
   "type": "module",
   "main": "./dist/index.js",
