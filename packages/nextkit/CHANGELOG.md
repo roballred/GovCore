@@ -1,5 +1,24 @@
 # @govcore/nextkit
 
+## 0.5.0
+
+### Minor Changes
+
+- 62a4bc4: Grouped, collapsible sidebar nav so consumers can match GovEA's sectioned shell (GovCore #92).
+
+  - `GroupedSideNav` + `NavGroup` — collapsible sections over the same items as `SideNav`. Presentational and client-hook-free: collapsing uses a native `<details>` exclusive accordion (groups share a `name`, so opening one closes the others) and the consumer marks the current section `defaultOpen`. Role/module gating stays the consumer's job (filter groups/items before passing them in, same contract as the pre-computed `active`).
+  - `AppShell` now accepts a `NavGroup[]` for `nav` (renders `GroupedSideNav`) in addition to the existing flat `NavItem[]` and `ReactNode` forms.
+
+- 34d3827: Shared runtime theming so every consumer has the same look, feel, and controls.
+
+  - `@govcore/theme`: add the `--header-border` brand token (base.css + allowlist + Tailwind `header.border`); extend `ThemeDefinition` with optional `description`/`preview`/`dark` metadata; add `themesToCss(themes)` to serialize a whole registry into one stylesheet (default under `:root`, each brand under `:root[data-theme="<id>"]`) for refetch-free switching; ship a `starterThemes` registry (`govcoreTheme` + `serviceNowTheme`) plus `THEME_STORAGE_KEY`/`DARK_STORAGE_KEY`. Brand themes still only touch allowlisted accent/header vars — the AA surface/contrast floor is unchanged.
+  - `@govcore/nextkit`: add `ThemeInitScript` (RSC, applies the saved brand + dark mode before first paint, no FOUC) and a new `@govcore/nextkit/theming` client subpath exporting `DarkModeToggle` and `ThemeSelector`.
+
+### Patch Changes
+
+- Updated dependencies [34d3827]
+  - @govcore/theme@0.2.0
+
 ## 0.4.0
 
 ### Minor Changes
