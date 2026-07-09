@@ -1,5 +1,11 @@
 # @govcore/nextkit
 
+## 0.5.1
+
+### Patch Changes
+
+- @govcore/support@0.2.3
+
 ## 0.5.0
 
 ### Minor Changes
