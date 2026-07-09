@@ -154,9 +154,12 @@ export async function updateUserAdministration(
     return { ok: false, reason: 'own-instance-admin' }
   }
 
-  // The last-admin guard is a membership-set question; fall back to the
-  // denormalized users columns only for a legacy account with no membership row.
-  const membership = await findMembership(db, target.id, target.organizationId)
+  // Org-scoped bookkeeping (membership lookup, last-admin guard, membership
+  // write) only applies to a user with a home org. A platform-only operator
+  // (an `instanceRole` holder with `organization_id = NULL`, #104) has no
+  // membership to keep in lockstep — only the instanceAdmin grant is meaningful.
+  const orgId = target.organizationId
+  const membership = orgId ? await findMembership(db, target.id, orgId) : null
   const change = {
     currentRole: membership?.role ?? target.role ?? '',
     currentIsActive: membership?.isActive ?? target.isActive,
@@ -166,11 +169,13 @@ export async function updateUserAdministration(
 
   try {
     await db.transaction(async (tx) => {
-      await assertNotLastActiveAdmin(tx, {
-        organizationId: target.organizationId,
-        adminRole: opts.adminRole,
-        change,
-      })
+      if (orgId) {
+        await assertNotLastActiveAdmin(tx, {
+          organizationId: orgId,
+          adminRole: opts.adminRole,
+          change,
+        })
+      }
       await tx
         .update(users)
         .set({
@@ -180,17 +185,19 @@ export async function updateUserAdministration(
           updatedAt: new Date(),
         })
         .where(eq(users.id, target.id))
-      await upsertMembership(tx, {
-        userId: target.id,
-        organizationId: target.organizationId,
-        role: opts.role,
-        isActive: opts.isActive,
-      })
+      if (orgId) {
+        await upsertMembership(tx, {
+          userId: target.id,
+          organizationId: orgId,
+          role: opts.role,
+          isActive: opts.isActive,
+        })
+      }
       await writeAuditLog(tx, {
         action: 'platform.user.update',
         entityType: 'user',
         entityId: target.id,
-        organizationId: target.organizationId,
+        organizationId: orgId,
         userId: opts.actorUserId,
         before: {
           role: target.role,

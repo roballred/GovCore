@@ -90,9 +90,22 @@ export const users = govcore.table(
   'users',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    organizationId: uuid('organization_id')
-      .notNull()
-      .references(() => organizations.id, { onDelete: 'cascade' }),
+    /**
+     * Denormalized *home* org pointer — NOT the authority on org access
+     * (`user_organization_memberships` is). Nullable + `ON DELETE SET NULL`, not
+     * `NOT NULL`/`CASCADE`, for two reasons (GovEA ADR-0006, #104):
+     *   1. Deleting a user's home org must not cascade-delete an identity whose
+     *      memberships in *other* orgs are still valid (a multi-org data-loss bug),
+     *      nor orphan the `audit_log` rows that reference the user id.
+     *   2. A platform-only operator (an `instanceRole` holder with no tenant org)
+     *      is a valid identity with `organization_id = NULL`.
+     * On org deletion the pointer nulls; per-org access drops via the membership
+     * table's own cascade; deactivating a user whose last active membership is
+     * gone is an app-level policy, not a DB cascade.
+     */
+    organizationId: uuid('organization_id').references(() => organizations.id, {
+      onDelete: 'set null',
+    }),
     /** Last-selected active org, honored first by active-membership resolution. */
     lastActiveOrganizationId: uuid('last_active_organization_id').references(
       (): AnyPgColumn => organizations.id,
