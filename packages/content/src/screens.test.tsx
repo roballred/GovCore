@@ -42,6 +42,77 @@ describe('contentColumns', () => {
   })
 })
 
+describe('ContentListScreen — list-view contract', () => {
+  const rows = [
+    { id: 'a1', title: 'Alpha', status: 'published' },
+    { id: 'a2', title: 'Beta', status: 'draft' },
+  ]
+
+  it('shows a New button when newHref is set', () => {
+    const html = renderToStaticMarkup(
+      <ContentListScreen def={article} rows={rows} basePath="/articles" newHref="/articles/new" />,
+    )
+    expect(html).toContain('href="/articles/new"')
+    expect(html).toContain('New Article')
+  })
+
+  it('renders a per-row View link, and Edit only when canEdit', () => {
+    const readOnly = renderToStaticMarkup(<ContentListScreen def={article} rows={rows} basePath="/articles" />)
+    expect(readOnly).toContain('href="/articles/a1"') // View
+    expect(readOnly).not.toContain('/articles/a1/edit')
+
+    const editable = renderToStaticMarkup(
+      <ContentListScreen def={article} rows={rows} basePath="/articles" canEdit />,
+    )
+    expect(editable).toContain('href="/articles/a1/edit"')
+    expect(editable).toContain('href="/articles/a2/edit"')
+  })
+
+  it('honors a per-row rowEditable gate (e.g. own-org vs federated)', () => {
+    const html = renderToStaticMarkup(
+      <ContentListScreen
+        def={article}
+        rows={rows}
+        basePath="/articles"
+        canEdit
+        rowEditable={(r) => r.id === 'a1'}
+      />,
+    )
+    expect(html).toContain('href="/articles/a1/edit"')
+    expect(html).not.toContain('href="/articles/a2/edit"')
+  })
+
+  it('renders an empty-state CTA with the New button when there are no rows', () => {
+    const html = renderToStaticMarkup(
+      <ContentListScreen def={article} rows={[]} basePath="/articles" newHref="/articles/new" />,
+    )
+    expect(html).toContain('No article yet.')
+    expect(html).toContain('href="/articles/new"')
+  })
+
+  it('filters rows by the search query over the primary field', () => {
+    const html = renderToStaticMarkup(
+      <ContentListScreen def={article} rows={rows} basePath="/articles" searchable query={{ q: 'alph' }} />,
+    )
+    expect(html).toContain('Alpha')
+    expect(html).not.toContain('Beta')
+  })
+
+  it('filters rows by a dropdown filter value', () => {
+    const html = renderToStaticMarkup(
+      <ContentListScreen
+        def={article}
+        rows={rows}
+        basePath="/articles"
+        filters={[{ field: 'status', label: 'Status', options: [{ value: 'draft', label: 'Draft' }] }]}
+        query={{ status: 'draft' }}
+      />,
+    )
+    expect(html).toContain('Beta')
+    expect(html).not.toContain('Alpha')
+  })
+})
+
 describe('statusTone', () => {
   it('maps the lifecycle states (unknown → muted)', () => {
     expect(statusTone('published')).toBe('default')

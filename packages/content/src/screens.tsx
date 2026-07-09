@@ -192,9 +192,132 @@ export function contentFormFields(def: ContentTypeDefinition): ContentFormField[
 
 // ── Screens ───────────────────────────────────────────────────────────────
 
+/** A dropdown filter over one field's values (the base list-view contract). */
+export interface ContentListFilter {
+  /** The row key to filter on — a scalar field name, or `<name>_id` for a reference. */
+  field: string
+  label: string
+  options: Array<{ value: string; label: string }>
+}
+
+function actionLinkClass(): string {
+  return 'inline-flex items-center rounded-md px-2 py-1 text-xs font-medium text-primary hover:bg-muted'
+}
+
+/** The per-row View/Edit actions column (dedicated routes: detail + edit pages). */
+function rowActionsColumn(
+  basePath: string,
+  opts: { canEdit?: boolean; rowEditable?: (row: Row) => boolean },
+): Column<Row> {
+  return {
+    key: '__actions',
+    header: 'Actions',
+    cell: (row) => {
+      const id = String(row.id ?? '')
+      const editable = opts.canEdit && (opts.rowEditable ? opts.rowEditable(row) : true)
+      return (
+        <div className="flex justify-end gap-1">
+          <a href={`${basePath}/${id}`} className={actionLinkClass()}>
+            View
+          </a>
+          {editable ? (
+            <a href={`${basePath}/${id}/edit`} className={actionLinkClass()}>
+              Edit
+            </a>
+          ) : null}
+        </div>
+      )
+    },
+  }
+}
+
+/** Read a row's value for a filter field (`<name>_id` references match on the id column). */
+function matchesFilter(row: Row, field: string, value: string): boolean {
+  return String(row[field] ?? '') === value
+}
+
 /**
- * List screen: a `PageHeader` over the type's `DataTable`. Pass rows from the
- * generated `list()` action; `basePath` makes each row link to its detail page.
+ * The list-view toolbar: a GET `<form>` (no client JS) with a search box and a
+ * select per filter. Submitting reloads the route with the query in the URL —
+ * shareable and RSC-pure. `Clear` links back to the unfiltered list.
+ */
+function ContentListToolbar({
+  basePath,
+  label,
+  searchable,
+  filters,
+  query,
+}: {
+  basePath?: string
+  label: string
+  searchable: boolean
+  filters: ContentListFilter[]
+  query: Record<string, string>
+}) {
+  const active = !!query.q || filters.some((f) => query[f.field] && query[f.field] !== 'all')
+  return (
+    <form method="get" className="mb-4 flex flex-wrap items-center gap-2">
+      {searchable ? (
+        <input
+          type="search"
+          name="q"
+          defaultValue={query.q ?? ''}
+          placeholder={`Search ${label.toLowerCase()}…`}
+          className="h-9 w-56 rounded-md border border-border bg-background px-3 text-sm text-foreground"
+        />
+      ) : null}
+      {filters.map((f) => (
+        <select
+          key={f.field}
+          name={f.field}
+          defaultValue={query[f.field] ?? 'all'}
+          aria-label={f.label}
+          className="h-9 rounded-md border border-border bg-background px-3 text-sm text-foreground"
+        >
+          <option value="all">{f.label}: all</option>
+          {f.options.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      ))}
+      <button
+        type="submit"
+        className="h-9 rounded-md border border-border px-3 text-sm font-medium text-foreground hover:bg-muted"
+      >
+        Filter
+      </button>
+      {active && basePath ? (
+        <a href={basePath} className="h-9 px-2 text-sm text-muted-foreground hover:text-foreground">
+          Clear
+        </a>
+      ) : null}
+    </form>
+  )
+}
+
+function NewButton({ href, label }: { href: string; label: string }) {
+  return (
+    <a
+      href={href}
+      className="inline-flex h-9 shrink-0 items-center justify-center whitespace-nowrap rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+    >
+      + New {label}
+    </a>
+  )
+}
+
+/**
+ * List screen — the base list-view contract (parity with the hand-written app
+ * tables): a header with a **New** button, an optional search/filter toolbar,
+ * the type's `DataTable` with a per-row **View/Edit** actions column, and an
+ * **empty-state CTA**. RSC-pure and dedicated-route based — View links to
+ * `${basePath}/${id}`, Edit to `${basePath}/${id}/edit`, New to `newHref`.
+ * Search/filters run over the passed `rows` from the current `query`
+ * (searchParams); wire them into your `list()` query for very large sets.
+ * Actions/edit are gated by `canEdit` and the optional per-row `rowEditable`
+ * (e.g. own-org vs federated).
  */
 export function ContentListScreen({
   def,
@@ -204,6 +327,12 @@ export function ContentListScreen({
   description,
   references,
   pagination,
+  newHref,
+  canEdit,
+  rowEditable,
+  searchable,
+  filters = [],
+  query = {},
 }: {
   def: ContentTypeDefinition
   rows: Row[]
@@ -213,15 +342,75 @@ export function ContentListScreen({
   references?: ReferenceDisplayMap
   /** Pass through from `listPage` + `parsePageParams` to paginate the list. */
   pagination?: PaginationProps
+  /** Create route (e.g. `${basePath}/new`). Set to show the New button + empty CTA action. */
+  newHref?: string
+  /** Whether the actor may edit — gates the row Edit action. */
+  canEdit?: boolean
+  /** Per-row edit gate on top of `canEdit` (ownership/federation). Default: editable. */
+  rowEditable?: (row: Row) => boolean
+  /** Show the search box (matches the primary text field). */
+  searchable?: boolean
+  /** Dropdown filters over field values. */
+  filters?: ContentListFilter[]
+  /** Current search/filter state from the route's searchParams (`{ q, <field> }`). */
+  query?: Record<string, string>
 }) {
   const label = title ?? def.label ?? humanize(def.name)
+  const singular = def.label ?? humanize(def.name)
+
+  // The type is genuinely empty (not a filtered-away result) → empty-state CTA.
+  if (rows.length === 0) {
+    return (
+      <div>
+        <div className="mb-6 flex items-start justify-between gap-4">
+          <PageHeader title={label} description={description} />
+          {newHref ? <NewButton href={newHref} label={singular} /> : null}
+        </div>
+        <div className="rounded-lg border border-dashed border-border p-10 text-center">
+          <p className="text-sm text-muted-foreground">No {label.toLowerCase()} yet.</p>
+          {newHref ? (
+            <div className="mt-4 flex justify-center">
+              <NewButton href={newHref} label={singular} />
+            </div>
+          ) : null}
+        </div>
+      </div>
+    )
+  }
+
+  const q = (query.q ?? '').toLowerCase().trim()
+  const primary = primaryField(def)
+  let shown = rows
+  if (q && primary) {
+    shown = shown.filter((r) => String(r[primary.name] ?? '').toLowerCase().includes(q))
+  }
+  for (const f of filters) {
+    const v = query[f.field]
+    if (v && v !== 'all') shown = shown.filter((r) => matchesFilter(r, f.field, v))
+  }
+
+  const columns = contentColumns(def, { basePath, references })
+  if (basePath) columns.push(rowActionsColumn(basePath, { canEdit, rowEditable }))
+
   return (
     <div>
-      <PageHeader title={label} description={description} />
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <PageHeader title={label} description={description} />
+        {newHref ? <NewButton href={newHref} label={singular} /> : null}
+      </div>
+      {searchable || filters.length > 0 ? (
+        <ContentListToolbar
+          basePath={basePath}
+          label={label}
+          searchable={!!searchable}
+          filters={filters}
+          query={query}
+        />
+      ) : null}
       <DataTable
-        columns={contentColumns(def, { basePath, references })}
-        rows={rows}
-        empty={`No ${label.toLowerCase()} yet.`}
+        columns={columns}
+        rows={shown}
+        empty={`No matching ${label.toLowerCase()}.`}
         pagination={pagination}
       />
     </div>
