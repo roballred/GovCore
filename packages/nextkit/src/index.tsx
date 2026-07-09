@@ -364,7 +364,7 @@ export function DataTable<Row extends Record<string, unknown>>({
   pagination?: PaginationProps
 }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-border">
+    <div className="overflow-x-auto rounded-lg border border-border">
       <table className="w-full border-collapse text-sm">
         <thead className="bg-muted text-muted-foreground">
           <tr>
