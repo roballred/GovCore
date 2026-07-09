@@ -11,7 +11,7 @@ import { randomUUID } from 'node:crypto'
 import postgres from 'postgres'
 import { eq } from 'drizzle-orm'
 import { migrate } from '@govcore/schema/migrate'
-import { users, userOrganizationMemberships } from '@govcore/schema'
+import { organizations, users, userOrganizationMemberships } from '@govcore/schema'
 import { createRbac } from '@govcore/rbac'
 import {
   activeMembershipCountByRole,
@@ -358,6 +358,63 @@ async function main() {
     'no console audit payload leaks a password',
     !consoleAudit.some((r) => /cedar-admin-1|cedar-admin-2|cedar-ia-pw/.test(JSON.stringify(r))),
   )
+
+  // 6d. #104 — org deletion nulls the home pointer; it never cascade-deletes a
+  // multi-org identity. A user homed in one org with a live membership in
+  // another must survive their home org's deletion with organization_id = NULL
+  // and the other membership intact (the multi-org data-loss bug ADR-0006 fixed),
+  // and updateUserAdministration must tolerate an org-less platform operator.
+  const orgHome = await createTestOrg(owner.db, { slug: 'org-home-104' })
+  const orgOther = await createTestOrg(owner.db, { slug: 'org-other-104' })
+  const multiUser = await createTestUser(owner.db, { organizationId: orgHome.id, role: 'admin' })
+  await addMembership(owner.db, { userId: multiUser.id, organizationId: orgHome.id, role: 'admin', isPrimary: true })
+  await addMembership(owner.db, { userId: multiUser.id, organizationId: orgOther.id, role: 'contributor' })
+
+  await owner.db.delete(organizations).where(eq(organizations.id, orgHome.id))
+
+  const [survivor] = await owner.db.select().from(users).where(eq(users.id, multiUser.id))
+  check('#104: identity survives home-org deletion (not cascade-deleted)', !!survivor)
+  check(
+    '#104: home pointer set to NULL on org deletion (SET NULL, not CASCADE)',
+    survivor?.organizationId === null,
+    JSON.stringify(survivor?.organizationId),
+  )
+  const survivingMemberships = await owner.db
+    .select()
+    .from(userOrganizationMemberships)
+    .where(eq(userOrganizationMemberships.userId, multiUser.id))
+  check(
+    '#104: home-org membership dropped, other-org membership intact',
+    survivingMemberships.length === 1 && survivingMemberships[0].organizationId === orgOther.id,
+    JSON.stringify(survivingMemberships.map((m) => m.organizationId)),
+  )
+
+  // A platform-only operator (org-less identity): updateUserAdministration must
+  // no-op the org-scoped bookkeeping (membership + last-admin guard) rather than
+  // crash on a null home org.
+  const [operator] = await owner.db
+    .insert(users)
+    .values({
+      email: 'operator-104@platform.example',
+      organizationId: null,
+      instanceRole: 'instance_admin',
+      isActive: true,
+    })
+    .returning()
+  const opUpdate = await updateUserAdministration(owner.db, {
+    userId: operator.id,
+    role: 'admin',
+    isActive: true,
+    instanceAdmin: true,
+    actorUserId: userA.id,
+    adminRole: 'admin',
+  })
+  check('#104: updateUserAdministration tolerates an org-less platform operator', opUpdate.ok, JSON.stringify(opUpdate))
+  const opMemberships = await owner.db
+    .select()
+    .from(userOrganizationMemberships)
+    .where(eq(userOrganizationMemberships.userId, operator.id))
+  check('#104: no membership fabricated for an org-less operator', opMemberships.length === 0, `(${opMemberships.length})`)
 
   // 7. immutability trigger (fires for superuser too)
   let blocked = false

@@ -146,7 +146,9 @@ async function applyNewPassword(
   db: GovcoreDb,
   opts: {
     userId: string
-    organizationId: string
+    // Nullable: a platform-only operator has no home org (#104). The audit log's
+    // organization_id is nullable, so the change/reset event records null.
+    organizationId: string | null
     newHash: string
     action: string
     actorUserId: string
