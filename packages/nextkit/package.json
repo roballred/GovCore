@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./theming": {
+      "types": "./dist/theming.d.ts",
+      "default": "./dist/theming.js"
     }
   },
   "scripts": {
@@ -38,7 +42,8 @@
   ],
   "tsup": {
     "entry": [
-      "src/index.tsx"
+      "src/index.tsx",
+      "src/theming.tsx"
     ],
     "format": [
       "esm"
