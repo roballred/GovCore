@@ -2,22 +2,26 @@ name: Release
 
 # Changesets release automation for the public npm @govcore scope.
 #
-# DORMANT BY DEFAULT. The job is skipped unless the repo variable
-# `NPM_PUBLISH` is set to `true`. To turn publishing on ("one click later"):
+# DORMANT BY DEFAULT. Both jobs are skipped unless the repo variable
+# `NPM_PUBLISH` is set to `true`. To turn releasing on:
 #   1. add an `NPM_TOKEN` secret with publish rights to the @govcore scope, and
 #   2. set repository variable `NPM_PUBLISH=true`.
-# Until both are in place nothing is published, so a merge to main can't release
-# by accident.
 #
-# Once enabled, on every push to main the changesets action either:
-#   - opens/updates a "Version Packages" PR when changesets are pending, or
-#   - runs `changeset publish` when versioned releases are ready.
+# Publishing to npm is MANUAL. The two responsibilities are split so a merge to
+# main never pushes to npm on its own:
+#
+#   - `version` (automatic, on push to main): keeps the "Version Packages" PR up
+#     to date by aggregating pending changesets. It NEVER publishes — merging it
+#     just lands the version bumps + CHANGELOGs on main, staged and waiting.
+#   - `publish` (manual, on workflow_dispatch): runs `changeset publish`, pushing
+#     the currently-versioned packages to npm and tagging the release.
+#
+# So the release always waits at "versioned on main" until a maintainer explicitly
+# runs the workflow (Actions → Release → Run workflow) to deploy.
 
 on:
   push:
     branches: [main]
-  # Manual trigger so the first release (and any later on-demand publish) can be
-  # kicked off without a dummy commit. Still gated by `vars.NPM_PUBLISH == 'true'`.
   workflow_dispatch:
 
 permissions:
@@ -27,8 +31,33 @@ permissions:
 concurrency: release-${{ github.ref }}
 
 jobs:
-  release:
-    if: ${{ vars.NPM_PUBLISH == 'true' }}
+  # Automatic: maintain the "Version Packages" PR only. No npm access, no publish.
+  version:
+    if: ${{ vars.NPM_PUBLISH == 'true' && github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: changesets/action@v1
+        with:
+          # `version` only — no `publish`, so this run opens/updates the
+          # "Version Packages" PR and never pushes to npm.
+          version: pnpm changeset version
+          commit: 'chore: version packages'
+          title: 'chore: version packages'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Manual: publish the currently-versioned packages to npm on demand.
+  publish:
+    if: ${{ vars.NPM_PUBLISH == 'true' && github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -43,12 +72,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # Compile dist/ (bins + types) before publishing the packages.
       - run: pnpm build --filter='./packages/*'
-      - uses: changesets/action@v1
-        with:
-          version: pnpm changeset version
-          publish: pnpm changeset publish
-          commit: 'chore: version packages'
-          title: 'chore: version packages'
+      # Publishes any package whose version is not yet on npm, and tags the release.
+      - run: pnpm changeset publish
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
