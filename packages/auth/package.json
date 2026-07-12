@@ -17,6 +17,10 @@
     "./password": {
       "types": "./dist/password.d.ts",
       "default": "./dist/password.js"
+    },
+    "./next-auth": {
+      "types": "./dist/types.d.ts",
+      "default": "./dist/types.js"
     }
   },
   "scripts": {
@@ -56,7 +60,8 @@
     "entry": [
       "src/index.ts",
       "src/logout-marker.ts",
-      "src/password.ts"
+      "src/password.ts",
+      "src/types.ts"
     ],
     "format": [
       "esm"
