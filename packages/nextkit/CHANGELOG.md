@@ -1,5 +1,11 @@
 # @govcore/nextkit
 
+## 0.6.0
+
+### Minor Changes
+
+- acd140f: Add the `@govcore/nextkit/client` subpath with `ConfirmButton` — a submit button that runs a native confirm before letting its `<form>` submit. The one client wrinkle for destructive actions (delete) in otherwise-RSC screens; the RSC-only main entry is unchanged.
+
 ## 0.5.1
 
 ### Patch Changes
