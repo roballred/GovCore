@@ -1,5 +1,13 @@
 # @govcore/example-smoke
 
+## 0.0.14
+
+### Patch Changes
+
+- Updated dependencies [52511a9]
+  - @govcore/auth@0.6.0
+  - @govcore/setup@0.1.3
+
 ## 0.0.13
 
 ### Patch Changes
