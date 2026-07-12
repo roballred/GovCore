@@ -19,6 +19,10 @@ declare module 'next-auth' {
       role: string
       organizationId: string | null
       instanceRole: string | null
+      // Security-policy snapshot (#107).
+      sessionTimeoutMinutes?: number
+      passwordExpiryDays?: number
+      lastPasswordChangedAt?: number | null
     } & DefaultSession['user']
   }
 }
@@ -30,5 +34,10 @@ declare module '@auth/core/jwt' {
     organizationId?: string | null
     instanceRole?: string | null
     checkedAt?: number
+    // Security-policy snapshot (#107).
+    issuedAt?: number
+    sessionTimeoutMinutes?: number
+    passwordExpiryDays?: number
+    lastPasswordChangedAt?: number | null
   }
 }

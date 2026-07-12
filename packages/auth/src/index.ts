@@ -25,6 +25,7 @@ import { writeAuditLog } from '@govcore/audit'
 import { verifyPassword } from './password'
 import { checkSsoProvisioning } from './sso-guard'
 import { LOGGED_OUT_MARKER_COOKIE } from './logout-marker'
+import { type SecurityPolicy, PERMISSIVE_POLICY, computeLockout } from './lockout'
 
 // The claims createAuth stamps onto the JWT / session. Kept LOCAL (used via a
 // cast in the callbacks) rather than shipped as a global `declare module
@@ -39,6 +40,12 @@ interface GovcoreClaims {
   organizationId?: string | null
   instanceRole?: string | null
   checkedAt?: number
+  // Security-policy snapshot (#107) — mirrored into the JWT so an edge middleware
+  // (no DB access) can make session-timeout / password-expiry redirect decisions.
+  issuedAt?: number
+  sessionTimeoutMinutes?: number
+  passwordExpiryDays?: number
+  lastPasswordChangedAt?: number | null
 }
 
 interface GovcoreSessionUser {
@@ -46,6 +53,9 @@ interface GovcoreSessionUser {
   role: string
   organizationId: string | null
   instanceRole: string | null
+  sessionTimeoutMinutes?: number
+  passwordExpiryDays?: number
+  lastPasswordChangedAt?: number | null
 }
 
 export interface CreateAuthOptions {
@@ -80,6 +90,31 @@ export interface CreateAuthOptions {
   sessionMaxAgeSeconds?: number
   /** Override the NextAuth pages. */
   pages?: { signIn?: string; error?: string }
+  /**
+   * Per-org {@link SecurityPolicy} (#107). Called in the credentials flow (to
+   * enforce account lockout) and in the `jwt` callback (to snapshot session
+   * timeout / password expiry onto the token). Omit for {@link PERMISSIVE_POLICY}
+   * — no lockout, no timeout — which keeps createAuth's prior behavior.
+   */
+  securityPolicy?: (organizationId: string | null) => Promise<SecurityPolicy> | SecurityPolicy
+  /**
+   * Extra request telemetry merged into login/logout audit metadata (e.g.
+   * proxy-aware ip / user-agent). Called per auth event; runs in the auth context.
+   */
+  authContext?: () => Promise<{ ip?: string; userAgent?: string }> | { ip?: string; userAgent?: string }
+  /**
+   * Called after the Auth.js adapter creates a user (typically SSO first login).
+   * Return `'deactivate'` to deactivate an anomalous identity — e.g. an org-less
+   * non-instance-admin that slipped past the invite-binding gate. createAuth then
+   * deactivates the user and writes an `auth.sso_org_binding_failed` audit. The
+   * default `'ok'` keeps the user.
+   */
+  onCreateUser?: (user: {
+    id: string
+    email: string | null
+    organizationId: string | null
+    instanceRole: string | null
+  }) => Promise<'ok' | 'deactivate'> | 'ok' | 'deactivate'
 }
 
 export function createAuth(opts: CreateAuthOptions) {
@@ -88,6 +123,20 @@ export function createAuth(opts: CreateAuthOptions) {
   // tenant context, so it all uses the RLS-bypassing authDb when supplied.
   const db = opts.authDb ?? opts.db
   const defaultRole = opts.defaultRole ?? 'viewer'
+
+  const resolvePolicy = async (organizationId: string | null): Promise<SecurityPolicy> =>
+    (await opts.securityPolicy?.(organizationId)) ?? PERMISSIVE_POLICY
+  const telemetry = async (): Promise<{ ip?: string; userAgent?: string }> =>
+    (await opts.authContext?.()) ?? {}
+
+  // Mirror the active org's session-timeout / password-expiry policy onto the
+  // token (#107), so an edge middleware — which cannot touch the DB — can read it.
+  const snapshotPolicy = async (claims: GovcoreClaims, lastPasswordChangedAt: Date | null | undefined) => {
+    const policy = await resolvePolicy(claims.organizationId ?? null)
+    claims.sessionTimeoutMinutes = policy.sessionTimeoutMinutes
+    claims.passwordExpiryDays = policy.passwordExpiryDays
+    claims.lastPasswordChangedAt = lastPasswordChangedAt ? new Date(lastPasswordChangedAt).getTime() : null
+  }
 
   // Org lifecycle gate: a session may not resolve for a suspended/archived org.
   // `null` (no org resolved) is not blocked here — that is a membership concern.
@@ -122,6 +171,7 @@ export function createAuth(opts: CreateAuthOptions) {
           const email = credentials?.email as string | undefined
           const password = credentials?.password as string | undefined
           if (!email || !password) return null
+          const meta = { email, ...(await telemetry()) }
 
           const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1)
           if (!user || !user.passwordHash || !user.isActive) {
@@ -129,21 +179,45 @@ export function createAuth(opts: CreateAuthOptions) {
               action: 'auth.login_failed',
               entityType: 'user',
               organizationId: user?.organizationId,
-              metadata: { email, reason: 'invalid_credentials' },
+              metadata: { ...meta, reason: 'invalid_credentials' },
+            })
+            return null
+          }
+
+          // Account lockout (#107). Check the lock BEFORE the password compare so a
+          // continuous attack on a locked account gets no timing oracle about
+          // password correctness (NIST 800-63B §5.2.2).
+          if (user.lockoutUntil && new Date(user.lockoutUntil) > new Date()) {
+            await writeAuditLog(db, {
+              action: 'auth.login_blocked_locked',
+              entityType: 'user',
+              entityId: user.id,
+              organizationId: user.organizationId,
+              metadata: { ...meta, reason: 'locked_account', lockoutUntil: user.lockoutUntil.toISOString() },
             })
             return null
           }
 
           const valid = await verifyPassword(password, user.passwordHash)
           if (!valid) {
+            // Increment the failure counter; lock when it crosses the org threshold.
+            const policy = await resolvePolicy(user.organizationId)
+            const { failedLoginAttempts: attempts, lockoutUntil } = computeLockout(user.failedLoginAttempts, policy)
+            const shouldLock = lockoutUntil !== null
+            await db.update(users).set({ failedLoginAttempts: attempts, lockoutUntil }).where(eq(users.id, user.id))
             await writeAuditLog(db, {
-              action: 'auth.login_failed',
+              action: shouldLock ? 'auth.login_failed_locked' : 'auth.login_failed',
               entityType: 'user',
               entityId: user.id,
               organizationId: user.organizationId,
-              metadata: { email, reason: 'invalid_credentials' },
+              metadata: { ...meta, reason: 'invalid_credentials', attempts, lockedUntil: lockoutUntil?.toISOString() ?? null },
             })
             return null
+          }
+
+          // Success — clear any prior failure/lock state.
+          if (user.failedLoginAttempts > 0 || user.lockoutUntil) {
+            await db.update(users).set({ failedLoginAttempts: 0, lockoutUntil: null }).where(eq(users.id, user.id))
           }
 
           return { id: user.id, email: user.email, name: user.name }
@@ -174,6 +248,9 @@ export function createAuth(opts: CreateAuthOptions) {
           claims.checkedAt = Date.now()
           // Deny the session if the resolved org is suspended/archived.
           if (!(await orgIsActive(claims.organizationId))) return null
+          // #107 — stamp session-age origin + the per-org policy snapshot.
+          claims.issuedAt = Date.now()
+          await snapshotPolicy(claims, dbUser?.lastPasswordChangedAt)
         } else if (claims.id) {
           const uid = claims.id
           if (trigger === 'update') {
@@ -183,6 +260,8 @@ export function createAuth(opts: CreateAuthOptions) {
               const active = await resolveActiveMembership(db, uid, dbUser.lastActiveOrganizationId)
               claims.role = active?.role ?? dbUser.role ?? defaultRole
               claims.organizationId = active?.organizationId ?? dbUser.organizationId ?? null
+              // Refresh the policy snapshot for the newly active org (#107).
+              await snapshotPolicy(claims, dbUser.lastPasswordChangedAt)
             }
             return token
           }
@@ -197,6 +276,15 @@ export function createAuth(opts: CreateAuthOptions) {
             if (!(await orgIsActive(claims.organizationId))) return null
             claims.instanceRole = dbUser.instanceRole ?? null
             claims.checkedAt = Date.now()
+            // Refresh the policy snapshot on the same cadence (#107).
+            await snapshotPolicy(claims, dbUser.lastPasswordChangedAt)
+          }
+          // #107 — per-org session timeout. NextAuth's static maxAge is the ceiling;
+          // the per-org policy lowers it. Age is measured from `issuedAt` (session
+          // origin), matching "reauthenticate after N minutes of session age".
+          const timeout = claims.sessionTimeoutMinutes
+          if (timeout && claims.issuedAt && Date.now() - claims.issuedAt > timeout * 60_000) {
+            return null
           }
         }
         return token
@@ -209,11 +297,41 @@ export function createAuth(opts: CreateAuthOptions) {
           su.role = claims.role ?? defaultRole
           su.organizationId = claims.organizationId ?? null
           su.instanceRole = claims.instanceRole ?? null
+          // #107 — surface the policy snapshot so the app + middleware can act on it.
+          su.sessionTimeoutMinutes = claims.sessionTimeoutMinutes ?? 0
+          su.passwordExpiryDays = claims.passwordExpiryDays ?? 0
+          su.lastPasswordChangedAt = claims.lastPasswordChangedAt ?? null
         }
         return session
       },
     },
     events: {
+      async createUser({ user }) {
+        // #107 — SSO-provisioning deactivation net. The adapter reaches createUser
+        // for an identity the signIn gate let through (or a setup edge case); the
+        // consumer decides via onCreateUser whether it is anomalous (e.g. an
+        // org-less non-instance-admin) and should be deactivated + audited.
+        if (!opts.onCreateUser) return
+        const [dbUser] = await db.select().from(users).where(eq(users.id, user.id!)).limit(1)
+        if (!dbUser) return
+        const decision = await opts.onCreateUser({
+          id: dbUser.id,
+          email: dbUser.email,
+          organizationId: dbUser.organizationId,
+          instanceRole: dbUser.instanceRole,
+        })
+        if (decision === 'deactivate') {
+          await db.transaction(async (tx) => {
+            await tx.update(users).set({ isActive: false }).where(eq(users.id, dbUser.id))
+            await writeAuditLog(tx, {
+              action: 'auth.sso_org_binding_failed',
+              entityType: 'user',
+              entityId: dbUser.id,
+              metadata: { email: dbUser.email, reason: 'no_organization_binding' },
+            })
+          })
+        }
+      },
       async signIn({ user, account }) {
         // End the logged-out state so the new session isn't treated as a zombie.
         try {
@@ -227,7 +345,7 @@ export function createAuth(opts: CreateAuthOptions) {
           entityType: 'user',
           entityId: user.id,
           userId: user.id,
-          metadata: { provider: account?.provider ?? 'credentials' },
+          metadata: { provider: account?.provider ?? 'credentials', ...(await telemetry()) },
         })
       },
       async signOut(message) {
@@ -237,6 +355,7 @@ export function createAuth(opts: CreateAuthOptions) {
           entityType: 'user',
           entityId: token?.id,
           userId: token?.id,
+          metadata: { ...(await telemetry()) },
         })
       },
     },
@@ -262,6 +381,8 @@ export { provisionUser } from './provisioning'
 export type { ProvisionUserResult } from './provisioning'
 export { checkSsoProvisioning } from './sso-guard'
 export type { SsoCheckResult } from './sso-guard'
+export { computeLockout, PERMISSIVE_POLICY } from './lockout'
+export type { SecurityPolicy } from './lockout'
 export {
   LOGGED_OUT_MARKER_COOKIE,
   LOGGED_OUT_MARKER_MAX_AGE_S,
