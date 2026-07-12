@@ -1,5 +1,12 @@
 # @govcore/setup
 
+## 0.1.3
+
+### Patch Changes
+
+- Updated dependencies [52511a9]
+  - @govcore/auth@0.6.0
+
 ## 0.1.2
 
 ### Patch Changes
