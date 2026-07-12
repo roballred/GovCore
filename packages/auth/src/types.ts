@@ -1,5 +1,14 @@
-// Module augmentation: the session/JWT shape GovCore stamps. Importing this file
-// (done by ./index) makes token.* and session.user.* typed for consumers too.
+// OPT-IN module augmentation for the session/JWT shape createAuth stamps.
+//
+// This is NOT imported by ./index — shipping a global `declare module 'next-auth'`
+// from the package entry would override a consumer's own session typing (e.g. a
+// consumer that types `role` as its own union, not bare `string`; see #108).
+// A single-role consumer that wants this ready-made shape opts in explicitly:
+//
+//   import '@govcore/auth/next-auth'
+//
+// A consumer with its own role type instead declares its own `next-auth`
+// augmentation and skips this.
 
 import type { DefaultSession } from 'next-auth'
 

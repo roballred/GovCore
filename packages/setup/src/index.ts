@@ -16,7 +16,9 @@ import { randomUUID } from 'node:crypto'
 import postgres from 'postgres'
 import { organizations, users, type GovcoreDb } from '@govcore/schema'
 import { slugify, upsertMembership } from '@govcore/tenancy'
-import { hashPassword, validatePassword, type PasswordPolicy } from '@govcore/auth'
+// Import from the leaf `./password` module, not the package entry, so @govcore/setup
+// does not transitively pull @govcore/auth's opt-in next-auth augmentation (#108).
+import { hashPassword, validatePassword, type PasswordPolicy } from '@govcore/auth/password'
 import { writeAuditLog } from '@govcore/audit'
 import { assertSafeIdentifier } from './identifier'
 

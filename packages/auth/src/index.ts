@@ -25,7 +25,28 @@ import { writeAuditLog } from '@govcore/audit'
 import { verifyPassword } from './password'
 import { checkSsoProvisioning } from './sso-guard'
 import { LOGGED_OUT_MARKER_COOKIE } from './logout-marker'
-import './types'
+
+// The claims createAuth stamps onto the JWT / session. Kept LOCAL (used via a
+// cast in the callbacks) rather than shipped as a global `declare module
+// 'next-auth'` augmentation, so importing @govcore/auth does not override a
+// consumer's own session typing — notably a consumer that types `role` as its
+// own union rather than bare `string` (#108). Consumers own their `next-auth`
+// module augmentation; single-role apps that want a ready-made one can opt into
+// `import '@govcore/auth/next-auth'`.
+interface GovcoreClaims {
+  id?: string
+  role?: string
+  organizationId?: string | null
+  instanceRole?: string | null
+  checkedAt?: number
+}
+
+interface GovcoreSessionUser {
+  id: string
+  role: string
+  organizationId: string | null
+  instanceRole: string | null
+}
 
 export interface CreateAuthOptions {
   /**
@@ -140,50 +161,54 @@ export function createAuth(opts: CreateAuthOptions) {
         return true
       },
       async jwt({ token, user, trigger }) {
+        const claims = token as GovcoreClaims
         if (user) {
           // Initial sign-in — resolve active org/role from the DB (never trust the
           // provider's claims about our roles).
           const [dbUser] = await db.select().from(users).where(eq(users.id, user.id!)).limit(1)
           const active = await resolveActiveMembership(db, user.id!, dbUser?.lastActiveOrganizationId)
-          token.id = user.id
-          token.role = active?.role ?? dbUser?.role ?? defaultRole
-          token.organizationId = active?.organizationId ?? dbUser?.organizationId ?? null
-          token.instanceRole = dbUser?.instanceRole ?? null
-          token.checkedAt = Date.now()
+          claims.id = user.id
+          claims.role = active?.role ?? dbUser?.role ?? defaultRole
+          claims.organizationId = active?.organizationId ?? dbUser?.organizationId ?? null
+          claims.instanceRole = dbUser?.instanceRole ?? null
+          claims.checkedAt = Date.now()
           // Deny the session if the resolved org is suspended/archived.
-          if (!(await orgIsActive(token.organizationId))) return null
-        } else if (token.id) {
+          if (!(await orgIsActive(claims.organizationId))) return null
+        } else if (claims.id) {
+          const uid = claims.id
           if (trigger === 'update') {
             // Explicit active-org switch — re-resolve server-authoritatively.
-            const [dbUser] = await db.select().from(users).where(eq(users.id, token.id)).limit(1)
+            const [dbUser] = await db.select().from(users).where(eq(users.id, uid)).limit(1)
             if (dbUser) {
-              const active = await resolveActiveMembership(db, token.id, dbUser.lastActiveOrganizationId)
-              token.role = active?.role ?? dbUser.role ?? defaultRole
-              token.organizationId = active?.organizationId ?? dbUser.organizationId ?? null
+              const active = await resolveActiveMembership(db, uid, dbUser.lastActiveOrganizationId)
+              claims.role = active?.role ?? dbUser.role ?? defaultRole
+              claims.organizationId = active?.organizationId ?? dbUser.organizationId ?? null
             }
             return token
           }
           // Re-validate isActive every 5 minutes so deactivation takes effect
           // without waiting for the 24h JWT to expire.
           const CHECK_INTERVAL_MS = 5 * 60 * 1000
-          const lastCheck = token.checkedAt ?? 0
+          const lastCheck = claims.checkedAt ?? 0
           if (Date.now() - lastCheck > CHECK_INTERVAL_MS) {
-            const [dbUser] = await db.select().from(users).where(eq(users.id, token.id)).limit(1)
+            const [dbUser] = await db.select().from(users).where(eq(users.id, uid)).limit(1)
             if (!dbUser || !dbUser.isActive) return null
             // Drop the session within the interval if the org was suspended/archived.
-            if (!(await orgIsActive(token.organizationId))) return null
-            token.instanceRole = dbUser.instanceRole ?? null
-            token.checkedAt = Date.now()
+            if (!(await orgIsActive(claims.organizationId))) return null
+            claims.instanceRole = dbUser.instanceRole ?? null
+            claims.checkedAt = Date.now()
           }
         }
         return token
       },
       async session({ session, token }) {
+        const claims = token as GovcoreClaims
         if (session.user) {
-          session.user.id = token.id ?? ''
-          session.user.role = token.role ?? defaultRole
-          session.user.organizationId = token.organizationId ?? null
-          session.user.instanceRole = token.instanceRole ?? null
+          const su = session.user as unknown as GovcoreSessionUser
+          su.id = claims.id ?? ''
+          su.role = claims.role ?? defaultRole
+          su.organizationId = claims.organizationId ?? null
+          su.instanceRole = claims.instanceRole ?? null
         }
         return session
       },
@@ -206,7 +231,7 @@ export function createAuth(opts: CreateAuthOptions) {
         })
       },
       async signOut(message) {
-        const token = 'token' in message ? message.token : null
+        const token = 'token' in message ? (message.token as GovcoreClaims) : null
         await writeAuditLog(db, {
           action: 'auth.logout',
           entityType: 'user',
