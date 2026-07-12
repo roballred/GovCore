@@ -13,6 +13,10 @@
     "./theming": {
       "types": "./dist/theming.d.ts",
       "default": "./dist/theming.js"
+    },
+    "./client": {
+      "types": "./dist/client.d.ts",
+      "default": "./dist/client.js"
     }
   },
   "scripts": {
@@ -43,7 +47,8 @@
   "tsup": {
     "entry": [
       "src/index.tsx",
-      "src/theming.tsx"
+      "src/theming.tsx",
+      "src/client.tsx"
     ],
     "format": [
       "esm"

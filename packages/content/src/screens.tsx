@@ -13,6 +13,7 @@
 
 import type { ReactNode } from 'react'
 import { Badge, DataTable, PageHeader, type Column, type PaginationProps } from '@govcore/nextkit'
+import { ConfirmButton } from '@govcore/nextkit/client'
 import {
   isLinkField,
   isReferenceField,
@@ -112,13 +113,18 @@ function primaryField(def: ContentTypeDefinition): FieldDefinition | undefined {
  */
 export function contentColumns(
   def: ContentTypeDefinition,
-  opts: { basePath?: string; references?: ReferenceDisplayMap } = {},
+  opts: { basePath?: string; references?: ReferenceDisplayMap; columns?: string[] } = {},
 ): Column<Row>[] {
   const primary = primaryField(def)
+  // Column curation: when `columns` is given, show only those field/computed
+  // names (in that order) — wide types otherwise render every field and push the
+  // Actions column off-screen. `status` is always kept as the trailing badge.
+  const include = opts.columns ? new Set(opts.columns) : null
   const columns: Column<Row>[] = []
 
   for (const f of def.fields) {
     if (isLinkField(f)) continue // to-many has no column on the row
+    if (include && !include.has(f.name)) continue
     const key = fieldKey(f)
     const isPrimary = primary?.name === f.name
     const refDisplay = isReferenceField(f) ? opts.references?.[f.name] : undefined
@@ -139,6 +145,7 @@ export function contentColumns(
   }
 
   for (const c of def.computed ?? []) {
+    if (include && !include.has(c.name)) continue
     columns.push({ key: c.name, header: fieldLabel(c) })
   }
 
@@ -204,10 +211,25 @@ function actionLinkClass(): string {
   return 'inline-flex items-center rounded-md px-2 py-1 text-xs font-medium text-primary hover:bg-muted'
 }
 
-/** The per-row View/Edit actions column (dedicated routes: detail + edit pages). */
+/** A server action a row Delete posts to (the id rides along in a hidden input). */
+export type ContentDeleteAction = (formData: FormData) => void | Promise<void>
+
+/**
+ * The per-row View/Edit/Delete actions column (dedicated routes: detail + edit
+ * pages). View is always shown; Edit is gated by `canEdit` + `rowEditable`;
+ * Delete is shown only when `canDelete` + a `deleteAction` are given (+ optional
+ * `rowDeletable`), and confirms before posting via the client `ConfirmButton`.
+ */
 function rowActionsColumn(
   basePath: string,
-  opts: { canEdit?: boolean; rowEditable?: (row: Row) => boolean },
+  opts: {
+    canEdit?: boolean
+    rowEditable?: (row: Row) => boolean
+    canDelete?: boolean
+    rowDeletable?: (row: Row) => boolean
+    deleteAction?: ContentDeleteAction
+    singular?: string
+  },
 ): Column<Row> {
   return {
     key: '__actions',
@@ -215,6 +237,8 @@ function rowActionsColumn(
     cell: (row) => {
       const id = String(row.id ?? '')
       const editable = opts.canEdit && (opts.rowEditable ? opts.rowEditable(row) : true)
+      const deletable =
+        opts.canDelete && !!opts.deleteAction && (opts.rowDeletable ? opts.rowDeletable(row) : true)
       return (
         <div className="flex justify-end gap-1">
           <a href={`${basePath}/${id}`} className={actionLinkClass()}>
@@ -224,6 +248,17 @@ function rowActionsColumn(
             <a href={`${basePath}/${id}/edit`} className={actionLinkClass()}>
               Edit
             </a>
+          ) : null}
+          {deletable ? (
+            <form action={opts.deleteAction} className="inline">
+              <input type="hidden" name="id" value={id} />
+              <ConfirmButton
+                message={`Delete this ${opts.singular ?? 'item'}? This cannot be undone.`}
+                className="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium text-destructive hover:bg-destructive/10"
+              >
+                Delete
+              </ConfirmButton>
+            </form>
           ) : null}
         </div>
       )
@@ -330,6 +365,10 @@ export function ContentListScreen({
   newHref,
   canEdit,
   rowEditable,
+  canDelete,
+  rowDeletable,
+  deleteAction,
+  columns,
   searchable,
   filters = [],
   query = {},
@@ -348,6 +387,14 @@ export function ContentListScreen({
   canEdit?: boolean
   /** Per-row edit gate on top of `canEdit` (ownership/federation). Default: editable. */
   rowEditable?: (row: Row) => boolean
+  /** Whether the actor may delete — gates the row Delete action (needs `deleteAction`). */
+  canDelete?: boolean
+  /** Per-row delete gate on top of `canDelete` (ownership/federation). Default: deletable. */
+  rowDeletable?: (row: Row) => boolean
+  /** Server action the row Delete posts to (id in a hidden field); confirms first. */
+  deleteAction?: ContentDeleteAction
+  /** Curate which field/computed columns show (ordered). Omit for all; `status` is always kept. */
+  columns?: string[]
   /** Show the search box (matches the primary text field). */
   searchable?: boolean
   /** Dropdown filters over field values. */
@@ -389,8 +436,19 @@ export function ContentListScreen({
     if (v && v !== 'all') shown = shown.filter((r) => matchesFilter(r, f.field, v))
   }
 
-  const columns = contentColumns(def, { basePath, references })
-  if (basePath) columns.push(rowActionsColumn(basePath, { canEdit, rowEditable }))
+  const tableColumns = contentColumns(def, { basePath, references, columns })
+  if (basePath) {
+    tableColumns.push(
+      rowActionsColumn(basePath, {
+        canEdit,
+        rowEditable,
+        canDelete,
+        rowDeletable,
+        deleteAction,
+        singular,
+      }),
+    )
+  }
 
   return (
     <div>
@@ -408,7 +466,7 @@ export function ContentListScreen({
         />
       ) : null}
       <DataTable
-        columns={columns}
+        columns={tableColumns}
         rows={shown}
         empty={`No matching ${label.toLowerCase()}.`}
         pagination={pagination}

@@ -296,3 +296,51 @@ describe('ContentForm choices', () => {
     expect(html).toMatch(/<option[^>]*selected[^>]*value="Hello"|<option[^>]*value="Hello"[^>]*selected/)
   })
 })
+
+describe('ContentListScreen — delete + column curation', () => {
+  const rows = [
+    { id: 'a1', title: 'Alpha', body: 'x', primary_tag_id: 't1', word_count: 5, status: 'published' },
+  ]
+  const del = async (_fd: FormData) => {}
+
+  it('renders a Delete (form + confirm) only when canDelete + deleteAction are given', () => {
+    const none = renderToStaticMarkup(
+      <ContentListScreen def={article} rows={rows} basePath="/articles" canEdit />,
+    )
+    expect(none).not.toContain('>Delete<')
+
+    const withDel = renderToStaticMarkup(
+      <ContentListScreen def={article} rows={rows} basePath="/articles" canEdit canDelete deleteAction={del} />,
+    )
+    expect(withDel).toContain('>Delete<')
+    expect(withDel).toContain('<form') // posts to the delete action
+    expect(withDel).toContain('name="id"') // id rides along
+  })
+
+  it('honors a per-row rowDeletable gate', () => {
+    const html = renderToStaticMarkup(
+      <ContentListScreen
+        def={article}
+        rows={[
+          { id: 'a1', title: 'A', status: 'draft' },
+          { id: 'a2', title: 'B', status: 'draft' },
+        ]}
+        basePath="/articles"
+        canDelete
+        deleteAction={del}
+        rowDeletable={(r) => r.id === 'a1'}
+      />,
+    )
+    expect((html.match(/>Delete</g) || []).length).toBe(1)
+  })
+
+  it('curates columns when `columns` is given (status always kept)', () => {
+    const html = renderToStaticMarkup(
+      <ContentListScreen def={article} rows={rows} basePath="/articles" columns={['title']} />,
+    )
+    expect(html).toContain('>Title<')
+    expect(html).toContain('>Status<')
+    expect(html).not.toContain('>Body<')
+    expect(html).not.toContain('>Word count<')
+  })
+})
