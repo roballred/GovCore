@@ -1,5 +1,12 @@
 # @govcore/middleware
 
+## 0.1.6
+
+### Patch Changes
+
+- Updated dependencies [c9cec04]
+  - @govcore/auth@0.5.0
+
 ## 0.1.5
 
 ### Patch Changes

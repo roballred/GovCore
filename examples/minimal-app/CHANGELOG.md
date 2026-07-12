@@ -1,5 +1,13 @@
 # @govcore/example-minimal-app
 
+## 0.0.12
+
+### Patch Changes
+
+- Updated dependencies [c9cec04]
+  - @govcore/auth@0.5.0
+  - @govcore/middleware@0.1.6
+
 ## 0.0.11
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 {
   "name": "@govcore/example-smoke",
-  "version": "0.0.12",
+  "version": "0.0.13",
   "private": true,
   "description": "End-to-end smoke harness: migrate + exercise rbac/tenancy/audit/RLS against a real Postgres",
   "type": "module",
