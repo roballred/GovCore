@@ -49,14 +49,50 @@ DB-level constraints that Drizzle doesn't manage (e.g. the append-only `audit_lo
 - Humans merge PRs. Don't push directly to `main`, don't force-push `main`, don't bypass hooks (`--no-verify`).
 - Don't commit secrets or `.env.local`.
 
+## Pre-Flight Checklist — Required Before Writing Any Code
+
+Same methodology as GovEA. Before implementing anything, work through every item below in order. If any item cannot be satisfied, stop and resolve it before proceeding. Do not start implementation to "figure it out as you go."
+
+### 1. Issue exists
+A GitHub issue must exist with defined scope and acceptance criteria. If the user hands me a task informally (chat message, verbal request), I must **create the issue first** and confirm its content before writing code. No exceptions.
+
+### 2. Traceability is present
+GovCore is a platform library, so its traceability anchor is the **design doc + the affected package**, not GovEA's EasyEA capability IDs/personas. The issue must name:
+- The `@govcore/*` package(s) it touches, and
+- The design-doc section/phase it belongs to ([`docs/design/platform-core-extraction.md`](./docs/design/platform-core-extraction.md) — §9 / §12 / Appendix B). If the work is new architecture not reflected in the design doc, **update the design doc first** (or in the same PR) — the design doc governs.
+
+### 3. Consumer rationale is identified
+Name the consumer need the work serves (which consuming app or API surface — GovEA is consumer #0, GovCRM #2). GovCore's "users" are the consuming apps/developers; there are no personas. If a change can't be tied to a consumer requirement or a design-doc decision, flag it and ask the user to confirm why it should exist. Do not assume the work is self-evidently justified.
+
+### 4. Acceptance criteria + verification are clear
+The issue should have enough detail to know when the work is done, including **which test tier proves it**: vitest unit suite (pure logic), `examples/smoke` (DB-backed, CI), and/or the `pnpm check:edge` gate. If acceptance criteria or the verification plan are missing or vague, ask before implementing.
+
+## Traceability in Every Commit and PR
+
+Every commit that touches implementation must reference the issue in the message body:
+
+```
+feat(content): base list-view contract in ContentListScreen
+
+Design: platform-core-extraction §11.6 (nextkit/screens)
+Closes #96
+```
+
+Every PR description must include:
+- `Closes #N` referencing the issue
+- The design-doc section/package the work maps to
+- A short explanation of what changed, why, and **how it was verified** (which test tier)
+
+This is not optional — it is the mechanism that makes AI-assisted work auditable and trustworthy.
+
 ## What NOT to carry over from GovEA
 
-These were GovEA's *product* process and operator topology — they are **not** GovCore's:
+The *methodology* (issue-first + traceability, above) is shared. These GovEA *product* artifacts and operator specifics are **not** GovCore's:
 
 - Azure / `scripts/azure-dev.sh` deployment rules and any operator-specific identifiers.
-- The EasyEA issue → capability → persona → acceptance-criteria pre-flight, and GovEA milestones/ARB. GovCore will define its own (lightweight) traceability once it needs one; until then, the design doc + this file are the working agreement.
+- EasyEA **capability docs, personas, and ARB review**, and GovEA milestones. GovCore has no `business-architecture/`, personas, or ARB — its traceability anchor is the design doc + issues (see Pre-Flight §2).
 - GovEA's `db:push` pre-production database workflow (see above).
 
 ## Working Approach
 
-Strangler-from-the-copy: extract the platform plane into `@govcore/*` packages incrementally, keeping the repo building at each step, following the phase order in the design doc (§9 / §12). Prove the content engine on one rich entity before generalizing (Appendix B). Until the GovCore repository's own backlog exists, **the design doc is the single planning record** — work breakdown lives there.
+Strangler-from-the-copy: extract the platform plane into `@govcore/*` packages incrementally, keeping the repo building at each step, following the phase order in the design doc (§9 / §12). Prove the content engine on one rich entity before generalizing (Appendix B). The design doc is the architectural source of truth; **GitHub issues are the working backlog** (each traced back to a design-doc section per the Pre-Flight checklist).
