@@ -12,6 +12,10 @@ import { users, type GovcoreDb } from '@govcore/schema'
 import { writeAuditLog } from '@govcore/audit'
 import { hashPassword, verifyPassword, validatePassword, type PasswordPolicy } from './password'
 
+// Re-exported so `@govcore/auth/password-flows` is self-sufficient: consumers get
+// the policy type from the same import-light subpath (no next-auth in the graph).
+export type { PasswordPolicy } from './password'
+
 /**
  * Result of a self-service change. `reason` is a stable code for routing (a
  * redirect, a field error); `message` is a human-readable default the caller
