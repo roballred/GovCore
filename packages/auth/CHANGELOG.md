@@ -1,5 +1,11 @@
 # @govcore/auth
 
+## 0.7.0
+
+### Minor Changes
+
+- 784e86b: Expose `changePassword` / `adminResetPassword` (+ `PasswordPolicy`) via a new **import-light `@govcore/auth/password-flows` subpath**. The flows themselves never touched `next-auth`, but living only on the main entry meant importing them pulled `createAuth` → `next-auth` → `next/server`, breaking consumers' vitest suites (node env). Import from `@govcore/auth/password-flows` to get the flows without that graph. The main `.` entry still re-exports them (non-breaking).
+
 ## 0.6.0
 
 ### Minor Changes

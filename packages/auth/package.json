@@ -1,6 +1,6 @@
 {
   "name": "@govcore/auth",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Auth.js config factory (createAuth): credentials + injected OIDC, SSO guard, active-membership session, login/logout audit",
   "type": "module",
   "main": "./dist/index.js",
