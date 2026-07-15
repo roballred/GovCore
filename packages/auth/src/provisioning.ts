@@ -9,7 +9,7 @@
 // password. A duplicate email returns a typed result, not a 500.
 
 import { users, isUniqueViolation, type GovcoreDb } from '@govcore/schema'
-import { writeAuditLog } from '@govcore/audit'
+import { writeAuditLog, composeAuditMetadata } from '@govcore/audit'
 import { upsertMembership } from '@govcore/tenancy'
 import { hashPassword, validatePassword, type PasswordPolicy } from './password'
 
@@ -23,7 +23,8 @@ export type ProvisionUserResult =
  * primary membership at `role`. `instanceAdmin` grants the platform-level role.
  * The initial password is validated against `policy` (falls back to the global
  * minimum) and hashed at `rounds` (defaults to the module default). Attribute
- * the audit to the operator via `actorUserId`.
+ * the audit to the operator via `actorUserId`. `auditMetadata`/`reason` attach
+ * optional incident-review context to the audit event (#121).
  */
 export async function provisionUser(
   db: GovcoreDb,
@@ -37,6 +38,8 @@ export async function provisionUser(
     actorUserId: string
     policy?: PasswordPolicy | null
     rounds?: number
+    auditMetadata?: Record<string, unknown> | null
+    reason?: string | null
   },
 ): Promise<ProvisionUserResult> {
   const email = opts.email.trim().toLowerCase()
@@ -77,6 +80,7 @@ export async function provisionUser(
         organizationId: opts.organizationId,
         userId: opts.actorUserId,
         after: { email, role: opts.role, instanceRole: user.instanceRole }, // never the password
+        metadata: composeAuditMetadata(opts.auditMetadata, opts.reason),
       })
       return user.id
     })
