@@ -22,7 +22,7 @@ import {
   type Organization,
   type OrganizationStatus,
 } from '@govcore/schema'
-import { writeAuditLog } from '@govcore/audit'
+import { writeAuditLog, composeAuditMetadata } from '@govcore/audit'
 import { assertNotLastActiveAdmin, LastActiveAdminError } from './guards'
 import { upsertMembership } from './sync'
 import { findMembership } from './memberships'
@@ -42,11 +42,18 @@ export type CreateOrganizationResult =
 /**
  * Create an organization and audit it as `platform.org.create`. `slug` defaults
  * to {@link slugify}(name); a collision on the unique slug returns a typed
- * `slug-taken` rather than throwing.
+ * `slug-taken` rather than throwing. `auditMetadata`/`reason` attach optional
+ * incident-review context to the audit event (#121).
  */
 export async function createOrganization(
   db: GovcoreDb,
-  opts: { name: string; slug?: string; actorUserId: string },
+  opts: {
+    name: string
+    slug?: string
+    actorUserId: string
+    auditMetadata?: Record<string, unknown> | null
+    reason?: string | null
+  },
 ): Promise<CreateOrganizationResult> {
   const name = opts.name.trim()
   if (!name) return { ok: false, reason: 'name-required' }
@@ -62,6 +69,7 @@ export async function createOrganization(
         organizationId: org.id,
         userId: opts.actorUserId,
         after: { name, slug },
+        metadata: composeAuditMetadata(opts.auditMetadata, opts.reason),
       })
       return org
     })
@@ -79,11 +87,18 @@ export type RenameOrganizationResult =
 /**
  * Rename an organization and audit the before/after as `platform.org.update`.
  * The slug is deliberately immutable — it identifies the tenant — so this
- * changes only the display name.
+ * changes only the display name. `auditMetadata`/`reason` attach optional
+ * incident-review context to the audit event (#121).
  */
 export async function renameOrganization(
   db: GovcoreDb,
-  opts: { organizationId: string; name: string; actorUserId: string },
+  opts: {
+    organizationId: string
+    name: string
+    actorUserId: string
+    auditMetadata?: Record<string, unknown> | null
+    reason?: string | null
+  },
 ): Promise<RenameOrganizationResult> {
   const name = opts.name.trim()
   if (!name) return { ok: false, reason: 'name-required' }
@@ -108,6 +123,7 @@ export async function renameOrganization(
       userId: opts.actorUserId,
       before: { name: before.name },
       after: { name },
+      metadata: composeAuditMetadata(opts.auditMetadata, opts.reason),
     })
   })
   return { ok: true }
@@ -129,7 +145,8 @@ export type UpdateUserAdministrationResult =
  *     transaction so the count and the write see one snapshot).
  *
  * Audited as `platform.user.update` with before/after. `adminRole` is the role
- * name that counts as admin for the last-admin guard.
+ * name that counts as admin for the last-admin guard. `auditMetadata`/`reason`
+ * attach optional incident-review context to the audit event (#121).
  */
 export async function updateUserAdministration(
   db: GovcoreDb,
@@ -140,6 +157,8 @@ export async function updateUserAdministration(
     instanceAdmin: boolean
     actorUserId: string
     adminRole: string
+    auditMetadata?: Record<string, unknown> | null
+    reason?: string | null
   },
 ): Promise<UpdateUserAdministrationResult> {
   const [target] = await db.select().from(users).where(eq(users.id, opts.userId))
@@ -209,6 +228,7 @@ export async function updateUserAdministration(
           isActive: opts.isActive,
           instanceRole: opts.instanceAdmin ? 'instance_admin' : null,
         },
+        metadata: composeAuditMetadata(opts.auditMetadata, opts.reason),
       })
     })
   } catch (err) {

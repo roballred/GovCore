@@ -35,6 +35,34 @@ export async function writeAuditLog(db: GovcoreDb, event: AuditEvent): Promise<v
   })
 }
 
+/**
+ * Compose an audit event's `metadata` from a consumer's request-context object
+ * and an optional operator reason (#121).
+ *
+ * The operator-plane mutations own their audit write, so a consumer that wants
+ * to record incident-review context — the source IP and user-agent an instance
+ * console captures, plus the operator's stated reason — has no other way in.
+ * Callers pass a plain object (core never touches request headers) and/or a
+ * reason; both land in one `metadata` object, with `reason` normalized to a
+ * trimmed `metadata.reason`.
+ *
+ * Returns `undefined` when neither yields anything, so the result can go
+ * straight to {@link writeAuditLog} and produce a `null` metadata column —
+ * identical to omitting the context entirely (no behavior change for callers
+ * that pass nothing).
+ */
+export function composeAuditMetadata(
+  auditMetadata?: Record<string, unknown> | null,
+  reason?: string | null,
+): Record<string, unknown> | undefined {
+  const trimmedReason = reason?.trim()
+  const merged = {
+    ...(auditMetadata ?? {}),
+    ...(trimmedReason ? { reason: trimmedReason } : {}),
+  }
+  return Object.keys(merged).length > 0 ? merged : undefined
+}
+
 /** Most-recent audit rows for an organization (newest first). */
 export async function listAuditForOrg(db: GovcoreDb, organizationId: string, limit = 100) {
   return db
