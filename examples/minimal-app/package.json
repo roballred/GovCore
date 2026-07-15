@@ -1,6 +1,6 @@
 {
   "name": "@govcore/example-minimal-app",
-  "version": "0.0.15",
+  "version": "0.0.16",
   "private": true,
   "description": "Minimal Next.js app built on GovCore — login + instance-admin console",
   "type": "module",

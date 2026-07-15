@@ -1,5 +1,12 @@
 # @govcore/server
 
+## 0.3.2
+
+### Patch Changes
+
+- Updated dependencies [e3b0b97]
+  - @govcore/audit@0.2.0
+
 ## 0.3.1
 
 ### Patch Changes
