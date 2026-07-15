@@ -1,5 +1,12 @@
 # @govcore/content
 
+## 0.5.1
+
+### Patch Changes
+
+- @govcore/server@0.3.2
+- @govcore/nextkit@0.6.1
+
 ## 0.5.0
 
 ### Minor Changes

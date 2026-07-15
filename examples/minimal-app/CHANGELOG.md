@@ -1,5 +1,18 @@
 # @govcore/example-minimal-app
 
+## 0.0.16
+
+### Patch Changes
+
+- Updated dependencies [e3b0b97]
+  - @govcore/audit@0.2.0
+  - @govcore/tenancy@0.4.0
+  - @govcore/auth@0.8.0
+  - @govcore/server@0.3.2
+  - @govcore/middleware@0.1.9
+  - @govcore/content@0.5.1
+  - @govcore/nextkit@0.6.1
+
 ## 0.0.15
 
 ### Patch Changes

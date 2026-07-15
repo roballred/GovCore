@@ -1,5 +1,14 @@
 # @govcore/setup
 
+## 0.1.5
+
+### Patch Changes
+
+- Updated dependencies [e3b0b97]
+  - @govcore/audit@0.2.0
+  - @govcore/tenancy@0.4.0
+  - @govcore/auth@0.8.0
+
 ## 0.1.4
 
 ### Patch Changes

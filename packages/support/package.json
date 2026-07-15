@@ -1,6 +1,6 @@
 {
   "name": "@govcore/support",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Instance-operator support access: break-glass elevation + act-as sessions",
   "type": "module",
   "main": "./dist/index.js",
