@@ -25,6 +25,10 @@
     "./password-flows": {
       "types": "./dist/password-flows.d.ts",
       "default": "./dist/password-flows.js"
+    },
+    "./provisioning": {
+      "types": "./dist/provisioning.d.ts",
+      "default": "./dist/provisioning.js"
     }
   },
   "scripts": {
@@ -66,7 +70,8 @@
       "src/logout-marker.ts",
       "src/password.ts",
       "src/types.ts",
-      "src/password-flows.ts"
+      "src/password-flows.ts",
+      "src/provisioning.ts"
     ],
     "format": [
       "esm"
