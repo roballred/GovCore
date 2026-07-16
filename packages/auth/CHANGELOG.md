@@ -1,5 +1,12 @@
 # @govcore/auth
 
+## 0.8.1
+
+### Patch Changes
+
+- Updated dependencies [0ba9eb4]
+  - @govcore/tenancy@0.5.0
+
 ## 0.8.0
 
 ### Minor Changes
