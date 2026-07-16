@@ -1,5 +1,14 @@
 # @govcore/example-minimal-app
 
+## 0.0.17
+
+### Patch Changes
+
+- Updated dependencies [0ba9eb4]
+  - @govcore/tenancy@0.5.0
+  - @govcore/auth@0.8.1
+  - @govcore/middleware@0.1.10
+
 ## 0.0.16
 
 ### Patch Changes
