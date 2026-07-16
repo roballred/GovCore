@@ -224,49 +224,96 @@ function isNavGroups(nav: NavItem[] | NavGroup[]): nav is NavGroup[] {
 }
 
 /**
+ * How wide the shell lets its content run (#102).
+ *
+ * - `contained` (default) — the centered `max-w-6xl` column. Reading-width, and
+ *   what a lighter consumer (GovCRM) wants.
+ * - `fluid` — full width. An information-dense app (GovEA: graphs, heatmaps, a
+ *   traceability matrix, ~20 entity tables) overflows or squishes inside 1152px.
+ */
+export type ShellWidth = 'contained' | 'fluid'
+
+/**
  * The product-plane app shell: branded header (`--header-bg`/`--header-fg`
  * tokens), left sidebar, main content. `nav` may be a flat `NavItem[]` (→
  * SideNav), a grouped `NavGroup[]` (→ GroupedSideNav), or a ReactNode (e.g. a
  * consumer's client nav wrapper); `actions` is a header slot for sign-out forms
- * and the like.
+ * and the like, and `search` a wider slot for a product search box.
+ *
+ * Accessible and print-ready by default (#102): it emits a skip-link to the
+ * `<main>` landmark (WCAG 2.4.1) alongside the `banner`/`navigation`/`main`
+ * landmarks, and hides its own chrome — header and sidebar — under
+ * `@media print`, so a consumer's exported handout prints as just the content.
+ *
+ * Still consumer-owned: **responsive mobile nav**. Below `lg` the sidebar keeps
+ * its width rather than collapsing to a drawer; pass a client drawer as the
+ * `nav` ReactNode until that lands (#102 gap 2).
  */
 export function AppShell({
   title,
   nav,
   navAriaLabel = 'Primary',
+  navTone,
   user,
   actions,
+  search,
+  width = 'contained',
+  mainId = 'main-content',
+  skipLinkLabel = 'Skip to main content',
   children,
 }: {
   title: ReactNode
   nav: NavItem[] | NavGroup[] | ReactNode
   navAriaLabel?: string
+  /** Tone for the built-in navs — `branded` for a dark rail (#103). */
+  navTone?: NavTone
   user?: { name?: string | null; email?: string | null }
   actions?: ReactNode
+  /** Header slot between the title and the actions — e.g. a product search box. */
+  search?: ReactNode
+  /** Content width: reading-width `contained` (default) or full-width `fluid`. */
+  width?: ShellWidth
+  /** id of the `<main>` landmark the skip-link targets. */
+  mainId?: string
+  skipLinkLabel?: string
   children: ReactNode
 }) {
+  const container = width === 'fluid' ? 'w-full px-6' : 'mx-auto max-w-6xl px-6'
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <header className="bg-header text-header-foreground">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
-          <span className="text-lg font-semibold">{title}</span>
-          <div className="flex items-center gap-4">
+      {/* First focusable thing on the page: invisible until focused, then pinned
+          top-left over the header (WCAG 2.4.1 — bypass the nav). */}
+      <a
+        href={`#${mainId}`}
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-background focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-foreground focus:shadow focus:outline-none focus:ring-2 focus:ring-ring"
+      >
+        {skipLinkLabel}
+      </a>
+      <header className="bg-header text-header-foreground print:hidden">
+        <div className={cx('flex items-center justify-between gap-4 py-3', container)}>
+          <span className="shrink-0 text-lg font-semibold">{title}</span>
+          {search ? <div className="min-w-0 flex-1 md:max-w-md">{search}</div> : null}
+          <div className="flex shrink-0 items-center gap-4">
             {user ? <span className="text-sm opacity-90">{user.name ?? user.email}</span> : null}
             {actions}
           </div>
         </div>
       </header>
-      <div className="mx-auto flex max-w-6xl gap-8 px-6 py-8">
-        {Array.isArray(nav) ? (
-          isNavGroups(nav) ? (
-            <GroupedSideNav groups={nav} ariaLabel={navAriaLabel} />
+      <div className={cx('flex gap-8 py-8', container)}>
+        <div className="shrink-0 print:hidden">
+          {Array.isArray(nav) ? (
+            isNavGroups(nav) ? (
+              <GroupedSideNav groups={nav} ariaLabel={navAriaLabel} tone={navTone} />
+            ) : (
+              <SideNav items={nav} ariaLabel={navAriaLabel} tone={navTone} />
+            )
           ) : (
-            <SideNav items={nav} ariaLabel={navAriaLabel} />
-          )
-        ) : (
-          nav
-        )}
-        <main className="min-w-0 flex-1">{children}</main>
+            nav
+          )}
+        </div>
+        <main id={mainId} className="min-w-0 flex-1">
+          {children}
+        </main>
       </div>
     </div>
   )
