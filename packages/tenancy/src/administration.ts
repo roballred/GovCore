@@ -238,6 +238,84 @@ export async function updateUserAdministration(
   return { ok: true }
 }
 
+export type UpdateMembershipAdministrationResult =
+  | { ok: true }
+  | { ok: false; reason: 'not-found' | 'last-admin' }
+
+/**
+ * Change a *single membership's* role and active flag from the operator console.
+ *
+ * The membership-scoped counterpart to {@link updateUserAdministration}: where
+ * that one administers a **user** (its home org + the denormalized `users`
+ * columns + the instance-admin grant), this administers one explicit
+ * `(userId, organizationId)` membership and touches **only that membership row**.
+ * The distinction matters once a user belongs to more than one org — an operator
+ * editing their role in a non-home org must change *that* membership, not the
+ * user's home-org row. `users.*` is never written here.
+ *
+ * Guards the org's last active admin ({@link assertNotLastActiveAdmin}, inside
+ * the transaction so the count and the write see one snapshot) and audits
+ * `platform.membership.update` with before/after. A missing membership returns
+ * `not-found` and mints no row — a revoke or role change targets an existing
+ * membership, and deactivation must not create one. `adminRole` is the role name
+ * that counts as admin for the guard.
+ */
+export async function updateMembershipAdministration(
+  db: GovcoreDb,
+  opts: {
+    userId: string
+    organizationId: string
+    role: string
+    isActive: boolean
+    actorUserId: string
+    adminRole: string
+    auditMetadata?: Record<string, unknown> | null
+    reason?: string | null
+  },
+): Promise<UpdateMembershipAdministrationResult> {
+  const before = await findMembership(db, opts.userId, opts.organizationId)
+  if (!before) return { ok: false, reason: 'not-found' }
+
+  const change = {
+    currentRole: before.role,
+    currentIsActive: before.isActive,
+    nextRole: opts.role,
+    nextIsActive: opts.isActive,
+  }
+
+  try {
+    await db.transaction(async (tx) => {
+      await assertNotLastActiveAdmin(tx, {
+        organizationId: opts.organizationId,
+        adminRole: opts.adminRole,
+        change,
+      })
+      // Membership-only: upsert's update branch rewrites role + isActive on the
+      // existing row (found above) without disturbing isPrimary or users.*.
+      await upsertMembership(tx, {
+        userId: opts.userId,
+        organizationId: opts.organizationId,
+        role: opts.role,
+        isActive: opts.isActive,
+      })
+      await writeAuditLog(tx, {
+        action: 'platform.membership.update',
+        entityType: 'user_organization_membership',
+        entityId: opts.userId,
+        organizationId: opts.organizationId,
+        userId: opts.actorUserId,
+        before: { role: before.role, isActive: before.isActive },
+        after: { role: opts.role, isActive: opts.isActive },
+        metadata: composeAuditMetadata(opts.auditMetadata, opts.reason),
+      })
+    })
+  } catch (err) {
+    if (err instanceof LastActiveAdminError) return { ok: false, reason: 'last-admin' }
+    throw err
+  }
+  return { ok: true }
+}
+
 export type OrganizationLifecycleResult = { ok: true } | { ok: false; reason: 'not-found' }
 
 /**

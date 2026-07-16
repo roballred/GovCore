@@ -32,11 +32,13 @@ export {
   createOrganization,
   renameOrganization,
   updateUserAdministration,
+  updateMembershipAdministration,
   suspendOrganization,
   reinstateOrganization,
   archiveOrganization,
   type CreateOrganizationResult,
   type RenameOrganizationResult,
   type UpdateUserAdministrationResult,
+  type UpdateMembershipAdministrationResult,
   type OrganizationLifecycleResult,
 } from './administration'

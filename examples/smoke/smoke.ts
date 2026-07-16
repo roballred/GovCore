@@ -21,6 +21,7 @@ import {
   renameOrganization,
   resolveActiveMembership,
   suspendOrganization,
+  updateMembershipAdministration,
   updateUserAdministration,
 } from '@govcore/tenancy'
 import { adminResetPassword, changePassword, hashPassword, provisionUser, verifyPassword } from '@govcore/auth'
@@ -344,15 +345,51 @@ async function main() {
   })
   check('updateUserAdministration blocks removing your own instance-admin', !selfDemote.ok && selfDemote.reason === 'own-instance-admin', JSON.stringify(selfDemote))
 
+  // per-membership administration (#124): operates on an explicit (user, org)
+  // membership, never users.*. State here: admin1 is a viewer (demoted above),
+  // admin2 is the console org's only remaining active admin.
+  const noMembership = await updateMembershipAdministration(owner.db, {
+    userId: iaId, organizationId: randomUUID(), role: 'viewer', isActive: true,
+    actorUserId: userA.id, adminRole: 'admin',
+  })
+  check('updateMembershipAdministration → not-found for a missing membership',
+    !noMembership.ok && noMembership.reason === 'not-found', JSON.stringify(noMembership))
+
+  const demoteOnlyAdmin = await updateMembershipAdministration(owner.db, {
+    userId: prov2.ok ? prov2.userId : '', organizationId: consoleOrgId, role: 'viewer', isActive: true,
+    actorUserId: userA.id, adminRole: 'admin',
+  })
+  check('updateMembershipAdministration blocks demoting the last active admin membership',
+    !demoteOnlyAdmin.ok && demoteOnlyAdmin.reason === 'last-admin', JSON.stringify(demoteOnlyAdmin))
+
+  // promoting admin1's membership back to admin never orphans → allowed; and it
+  // must move the membership row without touching the denormalized users.role.
+  const [admin1UserBefore] = await owner.db.select().from(users).where(eq(users.id, admin1Id))
+  const promoteMembership = await updateMembershipAdministration(owner.db, {
+    userId: admin1Id, organizationId: consoleOrgId, role: 'admin', isActive: true,
+    actorUserId: userA.id, adminRole: 'admin', reason: 'restoring org admin',
+  })
+  check('updateMembershipAdministration promotes a membership', promoteMembership.ok, JSON.stringify(promoteMembership))
+  check('membership role synced to admin', (await resolveActiveMembership(owner.db, admin1Id))?.role === 'admin')
+  const [admin1UserAfter] = await owner.db.select().from(users).where(eq(users.id, admin1Id))
+  check('membership admin left users.role untouched (membership-only write)',
+    admin1UserBefore.role === 'viewer' && admin1UserAfter.role === 'viewer')
+
   const consoleAudit = await listAuditForOrg(owner.db, consoleOrgId)
   const consoleActions = new Set(consoleAudit.map((r) => r.action))
   check(
-    'console flows audited (org.create/update + user.create/update)',
+    'console flows audited (org.create/update + user.create/update + membership.update)',
     consoleActions.has('platform.org.create') &&
       consoleActions.has('platform.org.update') &&
       consoleActions.has('platform.user.create') &&
-      consoleActions.has('platform.user.update'),
+      consoleActions.has('platform.user.update') &&
+      consoleActions.has('platform.membership.update'),
     [...consoleActions].join(','),
+  )
+  check(
+    'membership.update audit carries the operator reason',
+    consoleAudit.some((r) => r.action === 'platform.membership.update'
+      && (r.metadata as { reason?: string } | null)?.reason === 'restoring org admin'),
   )
   check(
     'no console audit payload leaks a password',
