@@ -1,6 +1,6 @@
 {
   "name": "@govcore/content",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "Content engine: compile content-type definitions into real Drizzle tables + migrations",
   "type": "module",
   "main": "./dist/index.js",
