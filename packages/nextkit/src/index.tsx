@@ -39,17 +39,49 @@ export interface NavGroup {
   defaultOpen?: boolean
 }
 
+/**
+ * Which surface the nav is painted on (#103).
+ *
+ * - `surface` (default) — the light content-area sidebar: foreground text on
+ *   `muted` hovers, `primary` active pill. What GovCRM uses.
+ * - `branded` — a dark brand rail sitting on `--header-bg`, where the content
+ *   tokens would render dark-on-dark. Uses white-alpha tones, matching the
+ *   header's own foreground treatment. What GovEA's sidebar needs.
+ *
+ * `branded` deliberately keys off white-alpha rather than new theme tokens: it
+ * layers on the same `--header-bg`/`--header-fg` pair the AppShell header
+ * already uses, so brand themes stay within the existing allowlist and no
+ * surface token has to be re-contrast-reviewed.
+ */
+export type NavTone = 'surface' | 'branded'
+
 /** Shared item-link styling for the flat and grouped sidebars. */
-function navLinkClass(active?: boolean): string {
+function navLinkClass(active?: boolean, tone: NavTone = 'surface'): string {
+  if (tone === 'branded') {
+    return cx(
+      'block rounded-md px-3 py-2 text-sm transition-colors',
+      active ? 'bg-white/15 font-medium text-white' : 'text-white/70 hover:bg-white/10 hover:text-white',
+    )
+  }
   return cx(
     'block rounded-md px-3 py-2 text-sm',
     active ? 'bg-primary text-primary-foreground' : 'text-foreground hover:bg-muted',
   )
 }
 
-function NavLink({ item }: { item: NavItem }) {
+/** Shared group-header styling, tone-matched to the item links. */
+function groupSummaryClass(tone: NavTone = 'surface'): string {
+  return cx(
+    'flex cursor-pointer list-none items-center justify-between rounded-md px-3 py-2 text-xs font-semibold uppercase tracking-wide [&::-webkit-details-marker]:hidden',
+    tone === 'branded'
+      ? 'text-white/60 hover:bg-white/10 hover:text-white'
+      : 'text-muted-foreground hover:bg-muted',
+  )
+}
+
+function NavLink({ item, tone }: { item: NavItem; tone?: NavTone }) {
   return (
-    <a href={item.href} aria-current={item.active ? 'page' : undefined} className={navLinkClass(item.active)}>
+    <a href={item.href} aria-current={item.active ? 'page' : undefined} className={navLinkClass(item.active, tone)}>
       {item.label}
     </a>
   )
@@ -60,13 +92,30 @@ function NavLink({ item }: { item: NavItem }) {
  * consumer (a ~5-line client wrapper on `usePathname` keeps this package free
  * of client hooks).
  */
-export function SideNav({ items, ariaLabel = 'Primary' }: { items: NavItem[]; ariaLabel?: string }) {
+export function SideNav({
+  items,
+  ariaLabel = 'Primary',
+  tone,
+  className,
+}: {
+  items: NavItem[]
+  ariaLabel?: string
+  /** Paint for a light content sidebar (default) or a dark brand rail. */
+  tone?: NavTone
+  /**
+   * Replaces the default `w-48` sizing — pass your own width/layout classes
+   * when the nav lives inside a rail that already owns its width. `cx` only
+   * concatenates (no Tailwind conflict resolution), so this substitutes rather
+   * than appends, keeping the emitted width deterministic.
+   */
+  className?: string
+}) {
   return (
-    <nav aria-label={ariaLabel} className="w-48 shrink-0">
+    <nav aria-label={ariaLabel} className={cx('shrink-0', className ?? 'w-48')}>
       <ul className="space-y-1">
         {items.map((item) => (
           <li key={item.href}>
-            <NavLink item={item} />
+            <NavLink item={item} tone={tone} />
           </li>
         ))}
       </ul>
@@ -81,19 +130,69 @@ export function SideNav({ items, ariaLabel = 'Primary' }: { items: NavItem[]; ar
  * others), and the consumer marks the current section `defaultOpen`. Role- and
  * module-gating are the consumer's job too: filter groups/items before passing
  * them in (as the flat SideNav expects `active` pre-computed).
+ *
+ * `tone="branded"` paints it for a dark brand rail; `topItems` renders ungrouped
+ * links above the sections; `className` replaces the default width when the nav
+ * sits inside a rail that owns its own sizing (#103).
+ *
+ * **Persisting or scripting the open section.** There is no `openGroup` /
+ * `onOpenChange` pair on purpose: a controlled accordion needs React state,
+ * which would make this a client component and ship JS to every consumer — and
+ * the native `<details>` already exposes the same control through the DOM. Each
+ * section carries `data-nav-group="<label>"`, so a consumer's own client code
+ * can do both jobs against the platform API:
+ *
+ * ```ts
+ * const el = document.querySelector<HTMLDetailsElement>('[data-nav-group="Portfolio"]')
+ * el.open = true                                  // imperative open (product tour)
+ * el.addEventListener('toggle', () => persist(el.open))  // persistence
+ * ```
  */
-export function GroupedSideNav({ groups, ariaLabel = 'Primary' }: { groups: NavGroup[]; ariaLabel?: string }) {
+export function GroupedSideNav({
+  groups,
+  topItems,
+  ariaLabel = 'Primary',
+  tone,
+  className,
+}: {
+  groups: NavGroup[]
+  /**
+   * Ungrouped links rendered flat above the groups (#103) — the "Dashboard" /
+   * "Overview" entries that head a real sidebar and belong to no section. Same
+   * active/tone treatment as the grouped items.
+   */
+  topItems?: NavItem[]
+  ariaLabel?: string
+  /** Paint for a light content sidebar (default) or a dark brand rail. */
+  tone?: NavTone
+  /** Replaces the default `w-48` sizing — see {@link SideNav}. */
+  className?: string
+}) {
   const accordionName = `${ariaLabel.replace(/\s+/g, '-').toLowerCase()}-nav`
   return (
-    <nav aria-label={ariaLabel} className="w-48 shrink-0 space-y-1">
+    <nav aria-label={ariaLabel} className={cx('shrink-0 space-y-1', className ?? 'w-48')}>
+      {topItems && topItems.length > 0 && (
+        <ul className="space-y-1">
+          {topItems.map((item) => (
+            <li key={item.href}>
+              <NavLink item={item} tone={tone} />
+            </li>
+          ))}
+        </ul>
+      )}
       {groups.map((group) => (
         <details
           key={group.label}
           name={accordionName}
           open={group.defaultOpen}
+          // A stable DOM hook so a consumer can persist the open section or drive
+          // it imperatively (a product tour opening a parent group) by setting
+          // `.open` — no controlled React state, which would force this whole nav
+          // to 'use client' and ship JS to consumers that never need it.
+          data-nav-group={group.label}
           className="[&[open]_.nav-chevron]:rotate-90"
         >
-          <summary className="flex cursor-pointer list-none items-center justify-between rounded-md px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:bg-muted [&::-webkit-details-marker]:hidden">
+          <summary className={groupSummaryClass(tone)}>
             <span>{group.label}</span>
             <svg
               className="nav-chevron h-3.5 w-3.5 shrink-0 transition-transform"
@@ -109,7 +208,7 @@ export function GroupedSideNav({ groups, ariaLabel = 'Primary' }: { groups: NavG
           <ul className="mt-1 space-y-1 pl-2">
             {group.items.map((item) => (
               <li key={item.href}>
-                <NavLink item={item} />
+                <NavLink item={item} tone={tone} />
               </li>
             ))}
           </ul>

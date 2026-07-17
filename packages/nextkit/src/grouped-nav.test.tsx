@@ -39,6 +39,49 @@ describe('GroupedSideNav', () => {
     // native exclusive accordion: every group shares the same name
     expect(html.match(/name="primary-nav"/g)?.length).toBe(2)
   })
+
+  // #103 — the branded rail, ungrouped items, and the DOM hook for open control.
+  it('paints content-surface tones by default', () => {
+    const html = renderToStaticMarkup(<GroupedSideNav groups={groups} />)
+    expect(html).toContain('bg-primary')
+    expect(html).toContain('text-muted-foreground')
+    expect(html).not.toContain('text-white/70')
+  })
+
+  it('paints white-alpha tones on a branded rail, for items and group headers', () => {
+    const html = renderToStaticMarkup(<GroupedSideNav groups={groups} tone="branded" />)
+    // active item: readable on a dark rail rather than the primary pill
+    expect(html).toMatch(/href="\/capabilities"[^>]*class="[^"]*bg-white\/15/)
+    expect(html).toContain('text-white/70')
+    expect(html).toContain('text-white/60') // group header
+    // the content-surface tones must not leak through on a dark rail
+    expect(html).not.toContain('bg-primary')
+    expect(html).not.toContain('text-muted-foreground')
+  })
+
+  it('renders ungrouped topItems above the groups, sharing the active treatment', () => {
+    const html = renderToStaticMarkup(
+      <GroupedSideNav
+        groups={groups}
+        topItems={[{ href: '/dashboard', label: 'Dashboard', active: true }]}
+      />,
+    )
+    expect(html).toMatch(/href="\/dashboard"[^>]*aria-current="page"/)
+    // flat: above the first <details>, not inside one
+    expect(html.indexOf('href="/dashboard"')).toBeLessThan(html.indexOf('<details'))
+  })
+
+  it('exposes a data-nav-group hook per section for persistence / imperative open', () => {
+    const html = renderToStaticMarkup(<GroupedSideNav groups={groups} />)
+    expect(html).toContain('data-nav-group="Business Architecture"')
+    expect(html).toContain('data-nav-group="Portfolio"')
+  })
+
+  it('lets className replace the default width for a consumer-owned rail', () => {
+    const html = renderToStaticMarkup(<GroupedSideNav groups={groups} className="w-full" />)
+    expect(html).toContain('w-full')
+    expect(html).not.toContain('w-48')
+  })
 })
 
 describe('AppShell nav dispatch', () => {
