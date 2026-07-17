@@ -1,0 +1,142 @@
+// @vitest-environment jsdom
+import { describe, expect, it } from 'vitest'
+import { renderToStaticMarkup } from 'react-dom/server'
+import axe from 'axe-core'
+import { AppShell, type NavGroup } from './index'
+
+const nav = [
+  { href: '/dashboard', label: 'Dashboard', active: true },
+  { href: '/reports', label: 'Reports' },
+]
+
+const groups: NavGroup[] = [
+  { label: 'Portfolio', defaultOpen: true, items: [{ href: '/applications', label: 'Applications' }] },
+]
+
+/** Render into a real document so axe can walk the tree. */
+function mount(markup: string): HTMLElement {
+  document.body.innerHTML = markup
+  return document.body
+}
+
+/**
+ * axe in jsdom runs the structural rules this shell is responsible for
+ * (landmarks, region, bypass, aria). Rules that need real layout/painting —
+ * color-contrast above all — cannot run here; the theme's WCAG-AA floor and a
+ * consumer's own browser-based axe gate cover those.
+ */
+async function axeViolations(markup: string, runOnly?: string[]) {
+  mount(markup)
+  const results = await axe.run(document.body, {
+    ...(runOnly ? { runOnly } : {}),
+    rules: { 'color-contrast': { enabled: false } },
+  })
+  return results.violations
+}
+
+describe('AppShell width', () => {
+  it('is a centered reading-width column by default', () => {
+    const html = renderToStaticMarkup(<AppShell title="X" nav={nav}>body</AppShell>)
+    expect(html).toContain('max-w-6xl')
+  })
+
+  it('runs full width when fluid, so dense content is not clipped', () => {
+    const html = renderToStaticMarkup(<AppShell title="X" nav={nav} width="fluid">body</AppShell>)
+    expect(html).not.toContain('max-w-6xl')
+    expect(html).toContain('w-full')
+  })
+})
+
+describe('AppShell landmarks + skip-link (#102)', () => {
+  it('emits a skip-link pointing at the main landmark', () => {
+    const html = renderToStaticMarkup(<AppShell title="X" nav={nav}>body</AppShell>)
+    expect(html).toMatch(/<a[^>]+href="#main-content"[^>]*>Skip to main content<\/a>/)
+    expect(html).toContain('<main id="main-content"')
+    // hidden until focused, then revealed
+    expect(html).toMatch(/href="#main-content"[^>]*class="[^"]*sr-only[^"]*focus:not-sr-only/)
+  })
+
+  it('honors a custom mainId so the skip-link still targets main', () => {
+    const html = renderToStaticMarkup(
+      <AppShell title="X" nav={nav} mainId="content" skipLinkLabel="Skip nav">body</AppShell>,
+    )
+    expect(html).toMatch(/href="#content"[^>]*>Skip nav</)
+    expect(html).toContain('<main id="content"')
+  })
+
+  it('wraps content in banner / navigation / main landmarks', () => {
+    const html = renderToStaticMarkup(<AppShell title="X" nav={nav}>body</AppShell>)
+    expect(html).toContain('<header')
+    expect(html).toMatch(/<nav[^>]+aria-label="Primary"/)
+    expect(html).toContain('<main')
+  })
+
+  it('passes axe A/AA structural rules (flat nav)', async () => {
+    const violations = await axeViolations(
+      renderToStaticMarkup(<AppShell title="X" nav={nav} user={{ name: 'A' }}>body</AppShell>),
+      ['wcag2a', 'wcag2aa'],
+    )
+    expect(violations.map((v) => v.id)).toEqual([])
+  })
+
+  it('passes axe A/AA structural rules (grouped nav + search + actions)', async () => {
+    const violations = await axeViolations(
+      renderToStaticMarkup(
+        <AppShell
+          title="X"
+          nav={groups}
+          width="fluid"
+          search={<input type="search" aria-label="Search" />}
+          actions={<button type="button">Sign out</button>}
+        >
+          body
+        </AppShell>,
+      ),
+      ['wcag2a', 'wcag2aa'],
+    )
+    expect(violations.map((v) => v.id)).toEqual([])
+  })
+
+  it('has no unlandmarked content (axe region rule)', async () => {
+    const violations = await axeViolations(
+      renderToStaticMarkup(<AppShell title="X" nav={nav}>body</AppShell>),
+      ['cat.keyboard', 'best-practice'],
+    )
+    expect(violations.map((v) => v.id)).not.toContain('region')
+  })
+})
+
+describe('AppShell print + header slots (#102)', () => {
+  it('hides its own chrome when printing, leaving the content', () => {
+    const html = renderToStaticMarkup(<AppShell title="X" nav={nav}>body</AppShell>)
+    // header and sidebar drop out; <main> is never print:hidden
+    expect(html.match(/print:hidden/g)?.length).toBe(2)
+    expect(html).toMatch(/<header[^>]*class="[^"]*print:hidden/)
+    expect(html).not.toMatch(/<main[^>]*class="[^"]*print:hidden/)
+  })
+
+  it('renders a search slot distinct from actions', () => {
+    const html = renderToStaticMarkup(
+      <AppShell
+        title="X"
+        nav={nav}
+        search={<input type="search" aria-label="Search" />}
+        actions={<button type="button">Sign out</button>}
+      >
+        body
+      </AppShell>,
+    )
+    expect(html).toContain('type="search"')
+    expect(html).toContain('Sign out')
+    // search sits between the title and the actions
+    expect(html.indexOf('type="search"')).toBeLessThan(html.indexOf('Sign out'))
+  })
+
+  it('passes navTone through to the built-in nav (branded rail)', () => {
+    const html = renderToStaticMarkup(
+      <AppShell title="X" nav={nav} navTone="branded">body</AppShell>,
+    )
+    expect(html).toContain('text-white/70')
+    expect(html).not.toContain('bg-primary')
+  })
+})
