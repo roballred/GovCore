@@ -1,5 +1,12 @@
 # @govcore/content
 
+## 0.5.3
+
+### Patch Changes
+
+- Updated dependencies [51a048b]
+  - @govcore/nextkit@0.8.0
+
 ## 0.5.2
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 # @govcore/example-smoke
 
+## 0.0.21
+
+### Patch Changes
+
+- @govcore/content@0.5.3
+
 ## 0.0.20
 
 ### Patch Changes
