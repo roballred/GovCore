@@ -73,8 +73,15 @@ function navLinkClass(active?: boolean, tone: NavTone = 'surface'): string {
 function groupSummaryClass(tone: NavTone = 'surface'): string {
   return cx(
     'flex cursor-pointer list-none items-center justify-between rounded-md px-3 py-2 text-xs font-semibold uppercase tracking-wide [&::-webkit-details-marker]:hidden',
+    // #103 shipped the branded group header at white/60 for a dimmer label. But
+    // on the branded rail — `--header-bg` under any active/hover white overlay
+    // (bg-white/15) — white/60 measures ~4.2:1, just under WCAG AA (a real axe
+    // gate caught it; the jsdom unit tests can't evaluate contrast). white/70
+    // clears it (~5.1:1) and matches the item links, which pass on the same
+    // surface. The item-vs-header hierarchy now comes from weight/casing, not a
+    // sub-AA opacity.
     tone === 'branded'
-      ? 'text-white/60 hover:bg-white/10 hover:text-white'
+      ? 'text-white/70 hover:bg-white/10 hover:text-white'
       : 'text-muted-foreground hover:bg-muted',
   )
 }

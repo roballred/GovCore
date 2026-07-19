@@ -52,8 +52,10 @@ describe('GroupedSideNav', () => {
     const html = renderToStaticMarkup(<GroupedSideNav groups={groups} tone="branded" />)
     // active item: readable on a dark rail rather than the primary pill
     expect(html).toMatch(/href="\/capabilities"[^>]*class="[^"]*bg-white\/15/)
+    // items AND group headers use white/70 — WCAG-AA on the branded rail even
+    // under a white-alpha overlay (bg-white/15). white/60 dipped below AA there.
     expect(html).toContain('text-white/70')
-    expect(html).toContain('text-white/60') // group header
+    expect(html).not.toContain('text-white/60')
     // the content-surface tones must not leak through on a dark rail
     expect(html).not.toContain('bg-primary')
     expect(html).not.toContain('text-muted-foreground')
