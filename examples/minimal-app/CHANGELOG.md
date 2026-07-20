@@ -1,5 +1,13 @@
 # @govcore/example-minimal-app
 
+## 0.0.21
+
+### Patch Changes
+
+- Updated dependencies [6a388f5]
+  - @govcore/nextkit@0.8.1
+  - @govcore/content@0.5.4
+
 ## 0.0.20
 
 ### Patch Changes
