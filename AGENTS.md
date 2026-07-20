@@ -1,6 +1,6 @@
 # GovCore — Project Instructions for OpenAI Codex
 
-> **Before any work, read [`docs/design/platform-core-extraction.md`](./docs/design/platform-core-extraction.md) and [`CLAUDE.md`](./CLAUDE.md) — they are authoritative and override this file.**
+> **Before any work, read [`docs/architecture.md`](./docs/architecture.md) and [`CLAUDE.md`](./CLAUDE.md) — they are authoritative and override this file.**
 
 This is a Codex-specific pointer and guardrail layer. It does not replace the governing plan.
 
@@ -10,12 +10,12 @@ A reusable, opinionated multi-tenant **platform core** for Next.js apps, publish
 
 ## Required Reading Order
 
-1. [`docs/design/platform-core-extraction.md`](./docs/design/platform-core-extraction.md) — the governing plan: architecture, locked decisions, package layout, phased extraction, security hardening.
+1. [`docs/architecture.md`](./docs/architecture.md) — the source of truth: the trust boundary, locked decisions, package layout, the enforced request path, security hardening.
 2. [`CLAUDE.md`](./CLAUDE.md) — operating policy: current state, database workflow, git/commit rules, what NOT to carry over from GovEA.
 
 ## Current State
 
-**`CLAUDE.md`'s "Current State" section is canonical — read it.** Summary: GovCore is a clean, packages-only monorepo (the GovEA seed was stripped); **all 14 `@govcore/*` packages are implemented and published to npm at `0.x`**, including the Milestone-2 content engine (built, smoke-tested in CI, dogfooded in `examples/minimal-app`). The GovEA cutover is in progress (Phase 0 done; see `docs/govea-cutover.md`). The sibling GovEA repo at `/Users/robbot/Repos/Claude/govea-app` remains the read-only reference for migrating GovEA's entities onto the content engine — never modify it from here.
+**`CLAUDE.md`'s "Current State" section is canonical — read it.** Summary: GovCore is a **shipped, maintained platform** — a clean, packages-only monorepo with **all 15 `@govcore/*` packages implemented and published to npm at `0.x`**, including the content engine (built, smoke-tested in CI, dogfooded in `examples/minimal-app`). Work is maintenance/evolution, not extraction. The sibling GovEA repo at `/Users/robbot/Repos/Claude/govea-app` is the read-only consumer-zero reference — never modify it from here.
 
 ## Branch & PR Hygiene
 
