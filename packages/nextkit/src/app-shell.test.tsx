@@ -140,3 +140,97 @@ describe('AppShell print + header slots (#102)', () => {
     expect(html).not.toContain('bg-primary')
   })
 })
+
+describe('AppShell fixed-rail layout (#141)', () => {
+  it('pins the rail full-height and makes the header sticky', () => {
+    const html = renderToStaticMarkup(
+      <AppShell title="X" nav={nav} layout="fixed-rail">body</AppShell>,
+    )
+    expect(html).toMatch(/<aside[^>]*class="[^"]*fixed inset-y-0 left-0/)
+    expect(html).toMatch(/<header[^>]*class="[^"]*sticky top-0/)
+  })
+
+  it('leaves the flow layout untouched by default', () => {
+    const html = renderToStaticMarkup(<AppShell title="X" nav={nav}>body</AppShell>)
+    expect(html).not.toContain('<aside')
+    expect(html).not.toContain('sticky top-0')
+  })
+
+  it('offsets the content by the rail at every breakpoint when there is no drawer', () => {
+    // A hidden rail with no drawer would mean no nav at all below `lg`, so the
+    // rail stays visible — and the offset has to match it, not be lg-only.
+    const html = renderToStaticMarkup(
+      <AppShell title="X" nav={nav} layout="fixed-rail">body</AppShell>,
+    )
+    expect(html).toContain('pl-56')
+    expect(html).not.toContain('lg:pl-56')
+    expect(html).not.toMatch(/<aside[^>]*class="[^"]*hidden lg:flex/)
+  })
+
+  it('makes the rail desktop-only once a drawer is supplied', () => {
+    const html = renderToStaticMarkup(
+      <AppShell title="X" nav={nav} layout="fixed-rail" mobileNav={<button type="button">Menu</button>}>
+        body
+      </AppShell>,
+    )
+    expect(html).toMatch(/<aside[^>]*class="[^"]*hidden lg:flex/)
+    expect(html).toContain('lg:pl-56')
+  })
+
+  it('renders a railHeader on the rail, not in the header', () => {
+    const html = renderToStaticMarkup(
+      <AppShell title="Header title" nav={nav} layout="fixed-rail" railHeader={<span>Wordmark</span>}>
+        body
+      </AppShell>,
+    )
+    expect(html.indexOf('Wordmark')).toBeLessThan(html.indexOf('Header title'))
+  })
+
+  it('still hides its chrome when printing', () => {
+    const html = renderToStaticMarkup(
+      <AppShell title="X" nav={nav} layout="fixed-rail">body</AppShell>,
+    )
+    expect(html).toMatch(/<aside[^>]*class="[^"]*print:hidden/)
+    expect(html).toMatch(/<header[^>]*class="[^"]*print:hidden/)
+    expect(html).not.toMatch(/<main[^>]*class="[^"]*print:hidden/)
+  })
+
+  it('has no serious axe violations in fixed-rail layout', async () => {
+    const violations = await axeViolations(
+      renderToStaticMarkup(
+        <AppShell title="X" nav={groups} layout="fixed-rail" railHeader={<span>Wordmark</span>}>
+          body
+        </AppShell>,
+      ),
+    )
+    expect(violations.map((v) => v.id)).toEqual([])
+  })
+})
+
+describe('AppShell <main> is focusable + extensible (#141)', () => {
+  // axe cannot catch a regression here: the skip link and its target both
+  // exist either way, so `bypass` passes whether or not focus actually moves.
+  // These assertions are the only gate on it.
+  it.each(['flow', 'fixed-rail'] as const)('gives <main> tabIndex="-1" in %s layout', (layout) => {
+    const html = renderToStaticMarkup(
+      <AppShell title="X" nav={nav} layout={layout}>body</AppShell>,
+    )
+    expect(html).toMatch(/<main[^>]*tabindex="-1"/i)
+  })
+
+  it('spreads mainProps onto <main> so a consumer can mark it for print', () => {
+    const html = renderToStaticMarkup(
+      <AppShell title="X" nav={nav} mainProps={{ 'data-print-main': '' } as never}>body</AppShell>,
+    )
+    expect(html).toMatch(/<main[^>]*data-print-main/)
+    // the default is preserved alongside the consumer's attributes
+    expect(html).toMatch(/<main[^>]*tabindex="-1"/i)
+  })
+
+  it('merges mainProps.className rather than dropping the shell defaults', () => {
+    const html = renderToStaticMarkup(
+      <AppShell title="X" nav={nav} mainProps={{ className: 'p-8' }}>body</AppShell>,
+    )
+    expect(html).toMatch(/<main[^>]*class="[^"]*flex-1[^"]*p-8/)
+  })
+})

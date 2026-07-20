@@ -6,7 +6,7 @@
 // instance-admin surface (design §11.6); AppShell is the product-plane shell
 // every consumer otherwise rebuilds (#58).
 
-import type { ReactNode } from 'react'
+import type { HTMLAttributes, ReactNode } from 'react'
 import {
   themeToCss,
   DARK_STORAGE_KEY,
@@ -37,6 +37,22 @@ import { renderNav, type NavItem, type NavGroup, type NavTone } from './nav'
 export type ShellWidth = 'contained' | 'fluid'
 
 /**
+ * How the shell arranges its chrome (#141).
+ *
+ * - `flow` (default) — header across the top, nav in-flow beside the content.
+ *   Both scroll away with the page. What GovCRM uses.
+ * - `fixed-rail` — a full-height rail pinned to the left edge with a sticky
+ *   header beside it, so nav and header stay put while dense content scrolls.
+ *   This is the shape GovEA's bespoke shell has always had, and the reason it
+ *   could not adopt `AppShell` wholesale.
+ *
+ * `fixed-rail` expects a `mobileNav`: the rail is desktop-only when one is
+ * supplied. Without it the rail stays visible at every breakpoint (and keeps
+ * its offset), since a hidden rail with no drawer would mean no nav at all.
+ */
+export type ShellLayout = 'flow' | 'fixed-rail'
+
+/**
  * The product-plane app shell: branded header (`--header-bg`/`--header-fg`
  * tokens), left sidebar, main content. `nav` may be a flat `NavItem[]` (→
  * SideNav), a grouped `NavGroup[]` (→ GroupedSideNav), or a ReactNode (e.g. a
@@ -57,8 +73,11 @@ export type ShellWidth = 'contained' | 'fluid'
  * The drawer is a slot rather than something AppShell builds itself because it
  * needs client state, and this module is the RSC-only entry: importing a
  * `'use client'` module here inlines it into `dist/index.js` without the
- * directive (#138), which breaks npm consumers while a source-first consumer
- * like GovEA stays green.
+ * directive (#138), which breaks every consumer that resolves the built output
+ * — which is all of them except `@govcore/rbac`.
+ *
+ * `layout="fixed-rail"` (#141) pins the rail full-height with a sticky header;
+ * `mainProps` reaches the `<main>` element for consumer-specific attributes.
  */
 export function AppShell({
   title,
@@ -70,7 +89,10 @@ export function AppShell({
   search,
   mobileNav,
   width = 'contained',
+  layout = 'flow',
+  railHeader,
   mainId = 'main-content',
+  mainProps,
   skipLinkLabel = 'Skip to main content',
   children,
 }: {
@@ -92,31 +114,111 @@ export function AppShell({
   mobileNav?: ReactNode
   /** Content width: reading-width `contained` (default) or full-width `fluid`. */
   width?: ShellWidth
+  /** Chrome arrangement: in-flow `flow` (default) or a pinned `fixed-rail`. */
+  layout?: ShellLayout
+  /**
+   * Block at the top of the fixed rail — typically a wordmark or home link, on
+   * the same 3.5rem row as the header beside it. Ignored in `flow` layout,
+   * where `title` already occupies the header.
+   */
+  railHeader?: ReactNode
   /** id of the `<main>` landmark the skip-link targets. */
   mainId?: string
+  /**
+   * Extra attributes for the `<main>` element — e.g. GovEA's `data-print-main`,
+   * which its print stylesheet keys the content padding reset off (#141). A
+   * `tabIndex` here overrides the default, though there is rarely a reason to:
+   * see below.
+   */
+  mainProps?: HTMLAttributes<HTMLElement>
   skipLinkLabel?: string
   children: ReactNode
 }) {
   const container = width === 'fluid' ? 'w-full px-6' : 'mx-auto max-w-6xl px-6'
+  const fixedRail = layout === 'fixed-rail'
+
+  /* First focusable thing on the page: invisible until focused, then pinned
+     top-left over the header (WCAG 2.4.1 — bypass the nav). */
+  const skipLink = (
+    <a
+      href={`#${mainId}`}
+      className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-background focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-foreground focus:shadow focus:outline-none focus:ring-2 focus:ring-ring"
+    >
+      {skipLinkLabel}
+    </a>
+  )
+
+  const headerBar = (
+    <>
+      {mobileNav}
+      <span className="shrink-0 text-lg font-semibold">{title}</span>
+      {search ? <div className="min-w-0 flex-1 md:max-w-md">{search}</div> : null}
+      <div className="flex shrink-0 items-center gap-4">
+        {user ? <span className="text-sm opacity-90">{user.name ?? user.email}</span> : null}
+        {actions}
+      </div>
+    </>
+  )
+
+  /**
+   * `tabIndex={-1}` is not decorative. A skip-link pointing at a non-focusable
+   * element scrolls the viewport but leaves focus where it was, so the next Tab
+   * resumes from inside the nav — exactly what WCAG 2.4.1 exists to prevent.
+   * It does not put `<main>` in the tab order. axe cannot detect the
+   * difference (link and target both exist, so `bypass` passes), which is why
+   * this defaults on rather than being left to the consumer (#141).
+   */
+  const main = (
+    <main
+      id={mainId}
+      tabIndex={-1}
+      {...mainProps}
+      className={cx('min-w-0 flex-1 focus:outline-none', mainProps?.className)}
+    >
+      {children}
+    </main>
+  )
+
+  if (fixedRail) {
+    // Without a drawer the rail has to stay visible at every breakpoint —
+    // hiding it would leave small screens with no nav at all — so the content
+    // offset has to match it breakpoint for breakpoint.
+    const railVisibility = mobileNav ? 'hidden lg:flex' : 'flex'
+    const contentOffset = mobileNav ? 'lg:pl-56' : 'pl-56'
+    return (
+      <div className="min-h-screen bg-background text-foreground">
+        {skipLink}
+        <aside
+          className={cx(
+            'fixed inset-y-0 left-0 z-40 w-56 flex-col border-r border-header-border bg-header text-header-foreground print:hidden',
+            railVisibility,
+          )}
+        >
+          {railHeader ? (
+            <div className="flex h-14 shrink-0 items-center border-b border-header-border px-4">
+              {railHeader}
+            </div>
+          ) : null}
+          <div className="min-h-0 flex-1 overflow-y-auto p-3">
+            {renderNav(nav, { ariaLabel: navAriaLabel, tone: navTone })}
+          </div>
+        </aside>
+        <div className={cx('flex min-h-screen flex-col', contentOffset)}>
+          <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-4 border-b border-header-border bg-header px-4 text-header-foreground lg:px-6 print:hidden">
+            {headerBar}
+          </header>
+          <div className={cx('flex flex-1 flex-col py-6', container)}>{main}</div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-background text-foreground">
-      {/* First focusable thing on the page: invisible until focused, then pinned
-          top-left over the header (WCAG 2.4.1 — bypass the nav). */}
-      <a
-        href={`#${mainId}`}
-        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-background focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-foreground focus:shadow focus:outline-none focus:ring-2 focus:ring-ring"
-      >
-        {skipLinkLabel}
-      </a>
+      {skipLink}
       <header className="bg-header text-header-foreground print:hidden">
         <div className={cx('flex items-center justify-between gap-4 py-3', container)}>
-          {mobileNav}
-          <span className="shrink-0 text-lg font-semibold">{title}</span>
-          {search ? <div className="min-w-0 flex-1 md:max-w-md">{search}</div> : null}
-          <div className="flex shrink-0 items-center gap-4">
-            {user ? <span className="text-sm opacity-90">{user.name ?? user.email}</span> : null}
-            {actions}
-          </div>
+          {headerBar}
         </div>
       </header>
       <div className={cx('flex gap-8 py-8', container)}>
@@ -125,9 +227,7 @@ export function AppShell({
         <div className={cx('shrink-0 print:hidden', mobileNav ? 'hidden lg:block' : undefined)}>
           {renderNav(nav, { ariaLabel: navAriaLabel, tone: navTone })}
         </div>
-        <main id={mainId} className="min-w-0 flex-1">
-          {children}
-        </main>
+        {main}
       </div>
     </div>
   )
