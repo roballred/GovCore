@@ -9,8 +9,9 @@ re-derive any of them. The canonical, always-current example is
 [`examples/minimal-app`](../examples/minimal-app) (built in CI on every PR); when
 a snippet here and that app disagree, the app is right.
 
-> **Audience:** a *new* consumer. Migrating the GovEA app specifically is a
-> different document — [`docs/govea-cutover.md`](./govea-cutover.md).
+> **Audience:** a *new* consumer, adopting-focused. For the architecture behind
+> these steps — the trust boundary, the seams, the package map — see
+> [`docs/architecture.md`](./architecture.md).
 
 ---
 
@@ -207,4 +208,4 @@ either from an older setup, delete them. See
 | `@govcore/theme` | WCAG-AA base theme + safe brand theming |
 
 For the architecture and the reasoning behind these decisions, see
-[`docs/design/platform-core-extraction.md`](./design/platform-core-extraction.md).
+[`docs/architecture.md`](./architecture.md).
