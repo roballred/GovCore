@@ -195,6 +195,23 @@ describe('AppShell fixed-rail layout (#141)', () => {
     expect(html).not.toMatch(/<main[^>]*class="[^"]*print:hidden/)
   })
 
+  it('reclaims the rail width for content when printing (#148)', () => {
+    // The rail is print:hidden, so its pl-56 offset on the content wrapper
+    // would leave an empty gutter — the wrapper drops the offset in print.
+    // No drawer: the offset is pl-56 at every breakpoint.
+    const solo = renderToStaticMarkup(
+      <AppShell title="X" nav={nav} layout="fixed-rail">body</AppShell>,
+    )
+    expect(solo).toMatch(/class="[^"]*\bpl-56\b[^"]*print:pl-0/)
+    // With a drawer the offset is lg:pl-56, and the reclaim still applies.
+    const drawer = renderToStaticMarkup(
+      <AppShell title="X" nav={nav} layout="fixed-rail" mobileNav={<button type="button">Menu</button>}>
+        body
+      </AppShell>,
+    )
+    expect(drawer).toMatch(/class="[^"]*\blg:pl-56\b[^"]*print:pl-0/)
+  })
+
   it('has no serious axe violations in fixed-rail layout', async () => {
     const violations = await axeViolations(
       renderToStaticMarkup(
