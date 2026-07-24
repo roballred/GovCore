@@ -63,6 +63,8 @@ export type ShellLayout = 'flow' | 'fixed-rail'
  * `<main>` landmark (WCAG 2.4.1) alongside the `banner`/`navigation`/`main`
  * landmarks, and hides its own chrome — header and sidebar — under
  * `@media print`, so a consumer's exported handout prints as just the content.
+ * In `fixed-rail` the hidden rail's width is reclaimed in print too (#148), so
+ * content spans the full page instead of keeping the rail-width gutter.
  *
  * **Responsive mobile nav** (#102 gap 2) is opt-in through `mobileNav`: pass
  * `<MobileNavDrawer>` from `@govcore/nextkit/client` and the sidebar collapses
@@ -203,7 +205,12 @@ export function AppShell({
             {renderNav(nav, { ariaLabel: navAriaLabel, tone: navTone })}
           </div>
         </aside>
-        <div className={cx('flex min-h-screen flex-col', contentOffset)}>
+        {/* `print:pl-0` reclaims the rail's width when printing: the rail is
+            `print:hidden`, so its `pl-56`/`lg:pl-56` offset would otherwise
+            leave a ~14rem empty gutter and squeeze content into a narrow
+            column (#148). `print:` beats the responsive offset the same way
+            the rail's own `print:hidden` beats `lg:flex` above. */}
+        <div className={cx('flex min-h-screen flex-col', contentOffset, 'print:pl-0')}>
           <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-4 border-b border-header-border bg-header px-4 text-header-foreground lg:px-6 print:hidden">
             {headerBar}
           </header>
