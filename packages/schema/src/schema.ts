@@ -123,7 +123,11 @@ export const users = govcore.table(
      * create a user before a membership is assigned.
      */
     role: text('role'),
-    /** Platform-level role (e.g. instance/platform admin), separate from per-org role. */
+    /**
+     * Platform-level role (e.g. instance/platform admin), separate from per-org
+     * role. Writable only from the privilege plane — a migrate trigger (#153)
+     * rejects INSERT/UPDATE of this column from the non-owner runtime role.
+     */
     instanceRole: text('instance_role'),
     isActive: boolean('is_active').notNull().default(true),
     // Account-lockout + password-expiry state; the policy itself lives app-side.
