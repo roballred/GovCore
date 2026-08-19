@@ -1,5 +1,13 @@
 # @govcore/support
 
+## 0.2.6
+
+### Patch Changes
+
+- Updated dependencies [43f4a76]
+  - @govcore/schema@0.5.0
+  - @govcore/audit@0.2.2
+
 ## 0.2.5
 
 ### Patch Changes
