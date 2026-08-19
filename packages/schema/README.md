@@ -25,6 +25,7 @@ Authored SQL in [`migrations/`](./migrations), applied in lexical order by
 | `0003_organization_lifecycle.sql` | org `status` column + lifecycle |
 | `0004_users_org_nullable.sql` | nullable home `organization_id` for org-less operators |
 | `0005_runtime_least_privilege.sql` | documents the runtime GRANT matrix (#152); grants themselves are applied by `@govcore/setup` `provisionRuntimeRole` |
+| `0006_protect_instance_role.sql` | trigger: `users.instance_role` writable only from privilege plane (superuser / BYPASSRLS / table owner) — blocks runtime escalation (#153) |
 
 > Core **owns** this DDL (design §5). It must stay in sync with
 > [`src/schema.ts`](./src/schema.ts). A schema-conformance test is a follow-up.
@@ -39,6 +40,9 @@ Authored SQL in [`migrations/`](./migrations), applied in lexical order by
   support/operator tables, and the migrate journal have **no** runtime grants
   (use `authDb` / `operatorDb`). `organizations` is SELECT-only. Re-run
   `provisionRuntimeRole` after upgrading.
+- **`users.instance_role`** is privilege-plane only (#153): a migrate trigger
+  rejects INSERT/UPDATE from the runtime role; setup also
+  `REVOKE UPDATE (instance_role)`.
 
 ## Tenant isolation (design §13.1)
 

@@ -1,4 +1,4 @@
--- 0005_protect_instance_role — privilege-plane guard for users.instance_role (#153).
+-- 0006_protect_instance_role — privilege-plane guard for users.instance_role (#153).
 --
 -- RLS on users only keys off organization_id. The runtime role has UPDATE on
 -- users, so a tenant transaction could previously escalate:

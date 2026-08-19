@@ -59,6 +59,8 @@ export interface ProvisionRuntimeRoleOptions {
  * - SELECT/INSERT on `audit_log`
  * - **no** access to Auth.js adapter tables, support/operator tables, or the
  *   migrate journal (those stay on `authDb` / `operatorDb` / owner)
+ * - **no** UPDATE on `users.instance_role` (#153; also enforced by a migrate
+ *   trigger — operator elevation is privilege-plane only)
  *
  * Re-running is safe and **required on upgrade**: it REVOKEs any prior blanket
  * `ALL TABLES` grants before applying the matrix.

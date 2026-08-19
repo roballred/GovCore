@@ -552,6 +552,32 @@ async function main() {
   }
   check('#152: runtime cannot UPDATE platform_config', platformConfigDenied)
 
+  // 8d. instance_role is privilege-plane only (#153): a tenant UPDATE must not
+  // escalate to instance_admin (JWT refresh would then unlock operatorAction).
+  console.log('• privilege plane: instance_role guard (#153)')
+  let instanceRoleDenied = false
+  try {
+    await withTenant(app.db, orgA.id, (tx) =>
+      tx.execute(sql`UPDATE govcore.users SET instance_role = 'instance_admin' WHERE id = ${userA.id}`),
+    )
+  } catch {
+    instanceRoleDenied = true
+  }
+  check('#153: runtime cannot UPDATE users.instance_role', instanceRoleDenied)
+
+  let instanceRoleInsertDenied = false
+  try {
+    await withTenant(app.db, orgA.id, (tx) =>
+      tx.execute(sql`
+        INSERT INTO govcore.users (organization_id, email, instance_role)
+        VALUES (${orgA.id}, ${`escalated-${Date.now()}@example.test`}, 'instance_admin')
+      `),
+    )
+  } catch {
+    instanceRoleInsertDenied = true
+  }
+  check('#153: runtime cannot INSERT users with instance_role set', instanceRoleInsertDenied)
+
   await app.close()
 
   const authPlane = createTestDb(smokeUrl) // DATABASE_URL superuser — bypasses FORCE RLS, like authDb
