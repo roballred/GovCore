@@ -483,31 +483,74 @@ async function main() {
   const loginOnRuntime = (await app.db.select().from(users).where(eq(users.email, userA.email))).length
   check('login wall: runtime pool finds 0 users by email (no GUC) — the #57 failure', loginOnRuntime === 0, `(${loginOnRuntime})`)
 
-  // 8c. instance_role is privilege-plane only (#153): a tenant UPDATE must not
-  // escalate to instance_admin (JWT refresh would then unlock operatorAction).
-  console.log('• privilege plane: instance_role guard (#153)')
-  let instanceRoleDenied = false
+  // 8c. least-privilege runtime grants (#152): tables outside RLS must not be
+  // reachable from the app role — otherwise a compromised pool can delete orgs,
+  // steal Auth.js tokens, or forge break-glass rows.
+  console.log('• least-privilege: runtime denials (#152)')
+  let orgDeleteDenied = false
   try {
-    await withTenant(app.db, orgA.id, (tx) =>
-      tx.execute(sql`UPDATE govcore.users SET instance_role = 'instance_admin' WHERE id = ${userA.id}`),
-    )
+    await app.client.unsafe(`DELETE FROM govcore.organizations WHERE id = '${orgA.id}'`)
   } catch {
-    instanceRoleDenied = true
+    orgDeleteDenied = true
   }
-  check('#153: runtime cannot UPDATE users.instance_role', instanceRoleDenied)
+  check('#152: runtime cannot DELETE organizations', orgDeleteDenied)
 
-  let instanceRoleInsertDenied = false
+  let orgUpdateDenied = false
   try {
-    await withTenant(app.db, orgA.id, (tx) =>
-      tx.execute(sql`
-        INSERT INTO govcore.users (organization_id, email, instance_role)
-        VALUES (${orgA.id}, ${`escalated-${Date.now()}@example.test`}, 'instance_admin')
-      `),
+    await app.client.unsafe(`UPDATE govcore.organizations SET name = 'pwned' WHERE id = '${orgA.id}'`)
+  } catch {
+    orgUpdateDenied = true
+  }
+  check('#152: runtime cannot UPDATE organizations', orgUpdateDenied)
+
+  const orgSelectOk = await app.client.unsafe(
+    `SELECT id FROM govcore.organizations WHERE id = '${orgA.id}'`,
+  )
+  check('#152: runtime CAN SELECT organizations (lifecycle gate)', orgSelectOk.length === 1)
+
+  let sessionsDenied = false
+  try {
+    await app.client.unsafe(`SELECT session_token FROM govcore.sessions LIMIT 1`)
+  } catch {
+    sessionsDenied = true
+  }
+  check('#152: runtime cannot SELECT auth sessions', sessionsDenied)
+
+  let accountsDenied = false
+  try {
+    await app.client.unsafe(`SELECT refresh_token FROM govcore.accounts LIMIT 1`)
+  } catch {
+    accountsDenied = true
+  }
+  check('#152: runtime cannot SELECT auth accounts', accountsDenied)
+
+  let breakGlassDenied = false
+  try {
+    await app.client.unsafe(
+      `INSERT INTO govcore.break_glass_sessions
+         (instance_admin_id, target_org_id, reason, expires_at)
+       VALUES ('${userA.id}', '${orgB.id}', 'forged', now() + interval '1 hour')`,
     )
   } catch {
-    instanceRoleInsertDenied = true
+    breakGlassDenied = true
   }
-  check('#153: runtime cannot INSERT users with instance_role set', instanceRoleInsertDenied)
+  check('#152: runtime cannot INSERT break_glass_sessions', breakGlassDenied)
+
+  let actAsDenied = false
+  try {
+    await app.client.unsafe(`SELECT id FROM govcore.act_as_sessions LIMIT 1`)
+  } catch {
+    actAsDenied = true
+  }
+  check('#152: runtime cannot SELECT act_as_sessions', actAsDenied)
+
+  let platformConfigDenied = false
+  try {
+    await app.client.unsafe(`UPDATE govcore.platform_config SET instance_name = 'pwned'`)
+  } catch {
+    platformConfigDenied = true
+  }
+  check('#152: runtime cannot UPDATE platform_config', platformConfigDenied)
 
   await app.close()
 
@@ -524,7 +567,8 @@ async function main() {
   await authPlane.client.unsafe(`UPDATE govcore.users SET instance_role = NULL WHERE id = '${userB.id}'`)
   await authPlane.close()
 
-  // 9. support: break-glass + act-as lifecycle (instance-level; not RLS-bound)
+  // 9. support: break-glass + act-as lifecycle (instance-level; not RLS-bound;
+  //    privileged pool only — runtime grants revoked in 8c)
   console.log('• support: break-glass + act-as')
   const sup = createTestDb(smokeUrl)
   // 240m grant is over the approval threshold → needs a second admin

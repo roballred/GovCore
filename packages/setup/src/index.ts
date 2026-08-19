@@ -21,8 +21,17 @@ import { slugify, upsertMembership } from '@govcore/tenancy'
 import { hashPassword, validatePassword, type PasswordPolicy } from '@govcore/auth/password'
 import { writeAuditLog } from '@govcore/audit'
 import { assertSafeIdentifier } from './identifier'
+import { PLATFORM_SCHEMA, buildRuntimeGrantStatements } from './runtime-grants'
 
 export { assertSafeIdentifier } from './identifier'
+export {
+  PLATFORM_SCHEMA,
+  RUNTIME_DML_TABLES,
+  RUNTIME_SELECT_TABLES,
+  RUNTIME_REVOKED_TABLES,
+  RUNTIME_AUDIT_TABLE,
+  buildRuntimeGrantStatements,
+} from './runtime-grants'
 
 export interface ProvisionRuntimeRoleOptions {
   /** Owner/superuser connection string — role creation and GRANT are DDL. */
@@ -31,30 +40,41 @@ export interface ProvisionRuntimeRoleOptions {
   role: string
   /** Login password for the role. */
   password: string
-  /** Schemas to grant DML + default privileges on. Default `['govcore']`. */
+  /** Schemas to grant. Default `['govcore']`. The `govcore` schema uses the
+   * least-privilege matrix (#152); other schemas (e.g. `content`) get full DML
+   * + default privileges. */
   schemas?: string[]
   log?: (message: string) => void
 }
 
 /**
- * Create the non-owner runtime role (idempotent) and grant it DML on the given
- * schemas, including **default privileges** so tables created later (e.g. the
- * content engine's compiled tables) are reachable without re-granting. This is
- * the role the app connects as — it must NOT be a superuser, so RLS binds it
- * (see @govcore/auth's `authDb` for why login still needs a separate pool).
+ * Create the non-owner runtime role (idempotent) and apply the least-privilege
+ * GRANT matrix (#152). This is the role the app connects as — it must NOT be a
+ * superuser, so RLS binds it (see @govcore/auth's `authDb` for why login still
+ * needs a separate pool).
  *
- * On `govcore.users`, UPDATE on `instance_role` is revoked (#153) — operator
- * elevation is privilege-plane only (also enforced by a migrate trigger).
+ * On the `govcore` schema the role gets:
+ * - SELECT on `organizations` (lifecycle gate)
+ * - SELECT/INSERT/UPDATE/DELETE on RLS-bound tenant + federation tables
+ * - SELECT/INSERT on `audit_log`
+ * - **no** access to Auth.js adapter tables, support/operator tables, or the
+ *   migrate journal (those stay on `authDb` / `operatorDb` / owner)
  *
+ * Re-running is safe and **required on upgrade**: it REVOKEs any prior blanket
+ * `ALL TABLES` grants before applying the matrix.
+ *
+ * Non-`govcore` schemas (e.g. `content`) still get full DML + default
+ * privileges — compiled content tables are FORCE-RLS'd by the engine.
  * Content-engine consumers pass `schemas: ['govcore', 'content']` once the
  * `content` schema exists.
  */
 export async function provisionRuntimeRole(opts: ProvisionRuntimeRoleOptions): Promise<void> {
   assertSafeIdentifier(opts.role, 'role')
-  const schemas = opts.schemas ?? ['govcore']
+  const schemas = opts.schemas ?? [PLATFORM_SCHEMA]
   schemas.forEach((s) => assertSafeIdentifier(s, 'schema'))
   const log = opts.log ?? (() => {})
   const escapedPassword = opts.password.replace(/'/g, "''")
+  const statements = buildRuntimeGrantStatements(opts.role)
 
   const sql = postgres(opts.connectionString, { max: 1 })
   try {
@@ -63,22 +83,13 @@ export async function provisionRuntimeRole(opts: ProvisionRuntimeRoleOptions): P
        EXCEPTION WHEN duplicate_object THEN NULL; END $$;`,
     )
     for (const schema of schemas) {
-      await sql.unsafe(`GRANT USAGE ON SCHEMA ${schema} TO ${opts.role}`)
-      await sql.unsafe(`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA ${schema} TO ${opts.role}`)
-      await sql.unsafe(`GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA ${schema} TO ${opts.role}`)
-      await sql.unsafe(
-        `ALTER DEFAULT PRIVILEGES IN SCHEMA ${schema} GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ${opts.role}`,
-      )
-      await sql.unsafe(
-        `ALTER DEFAULT PRIVILEGES IN SCHEMA ${schema} GRANT USAGE, SELECT ON SEQUENCES TO ${opts.role}`,
-      )
-      // #153 — even with table-level UPDATE, the runtime must not be able to
-      // stamp instance_role (operator plane). The migrate trigger is the binding
-      // guard; this column REVOKE is defense in depth for the govcore schema.
-      if (schema === 'govcore') {
-        await sql.unsafe(`REVOKE UPDATE (instance_role) ON govcore.users FROM ${opts.role}`)
+      if (schema === PLATFORM_SCHEMA) {
+        for (const stmt of statements.revoke) await sql.unsafe(stmt)
+        for (const stmt of statements.grant) await sql.unsafe(stmt)
+      } else {
+        for (const stmt of statements.otherSchema(schema)) await sql.unsafe(stmt)
       }
-      log(`govcore-setup: granted ${opts.role} on schema ${schema}`)
+      log(`govcore-setup: granted ${opts.role} on schema ${schema} (least-privilege)`)
     }
   } finally {
     await sql.end()
