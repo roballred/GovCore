@@ -137,11 +137,12 @@ The isolation guarantee is worth its own section, because it's the design's shar
 
 **How GovCore makes it impossible.** Three mechanisms compose:
 
-1. **Row-Level Security.** Every platform table — and every app table scoped with `orgScoped` — sits behind an RLS policy: `USING (organization_id = current_setting('app.current_org')::uuid)`. A query that *forgets* its org filter still returns only the active org's rows, because the database refuses to show the rest.
+1. **Row-Level Security.** Every *org-scoped* platform table — and every app table scoped with `orgScoped` — sits behind an RLS policy: `USING (organization_id = current_setting('app.current_org')::uuid)`. A query that *forgets* its org filter still returns only the active org's rows, because the database refuses to show the rest. (Intentional exceptions — `organizations`, Auth.js adapter tables, support/operator tables — are kept off the runtime role via least-privilege grants; see below.)
 2. **A transaction-local org GUC.** `tenantAction` opens a transaction and sets the org as a transaction-scoped setting — `set_config('app.current_org', orgId, true)` — before running the handler. The `true` makes it transaction-local, which matters: the app connects through a small direct pool, so a session-level `SET` would bleed across pooled requests. This is *why* all tenant DB access routes through the action's transaction.
 3. **Two Postgres roles.** RLS does not apply to a table's owner, and a table's owner can drop the audit trigger. So the database is provisioned with two roles: an **owner/DDL role** used only by the migration runner (`govcore-migrate`), and a **non-owner runtime role** used by the app at request time. `FORCE ROW LEVEL SECURITY` binds RLS to the runtime role, which can read/write its org's data but **cannot** read another org's rows, rewrite audit history, or disable either protection.
+4. **Least-privilege grants on the runtime role** (`provisionRuntimeRole`, #152). Several platform tables are *intentionally outside RLS* — `organizations` (the tenant root), Auth.js adapter tables (`accounts` / `sessions` / `verification_tokens`), and support/operator tables (`break_glass_sessions`, `act_as_sessions`, `instance_settings`, `platform_config`). A blanket `GRANT … ON ALL TABLES` would let a compromised app pool delete tenants, steal session tokens, or forge break-glass rows despite RLS elsewhere. The runtime role therefore gets an explicit matrix: **SELECT** on `organizations`; full DML on RLS-bound tenant + federation tables; **SELECT/INSERT** on `audit_log`; **nothing** on Auth.js, support, operator, or the migrate journal. Those stay on `authDb` / `operatorDb` / owner. Re-run `provisionRuntimeRole` after upgrading so existing instances pick up the REVOKEs. (The content schema keeps full DML + default privileges — compiled tables are FORCE-RLS'd by the engine.)
 
-Net effect: a compromised *app* role can't cross the tenant boundary and can't cover its tracks. The elevated privilege exists only at migration time. The honest cost — and it's a real architectural commitment, not a free toggle — is the rule that **all tenant-scoped DB access happens inside a tenant transaction.**
+Net effect: a compromised *app* role can't cross the tenant boundary, can't touch session tokens or support tables, and can't cover its tracks. The elevated privilege exists only on the privileged pools (auth/operator) and at migration time. The honest cost — and it's a real architectural commitment, not a free toggle — is the rule that **all tenant-scoped DB access happens inside a tenant transaction**, and that auth/support/operator work uses the elevated pools.
 
 ### The seams that make it reusable
 
@@ -359,7 +360,7 @@ Packages are released independently with Changesets and semver. Because core own
 | **Scope** | Platform plane **+ content engine**; an app's entity *definitions* stay app-side as configuration |
 | **Stack coupling** | Opinionated — Next.js App Router + Drizzle + PostgreSQL + Auth.js. Other stacks out of scope |
 | **DB ownership** | Core owns the platform tables **and** their migrations; the app owns only its domain tables |
-| **Tenant isolation** | Database-enforced — Postgres RLS + a transaction-local org GUC + a two-role (owner/runtime) DB |
+| **Tenant isolation** | Database-enforced — Postgres RLS + a transaction-local org GUC + a two-role (owner/runtime) DB with least-privilege runtime GRANTs |
 | **RBAC** | Generic `createRbac` over an app-supplied role/permission map; no fixed roles in core |
 | **Accessibility** | A WCAG-AA base theme as the floor; apps add brand themes on top, never below it |
 | **Tenant portability** | Core owns whole-tenant backup/restore to file; the app registers which tables participate |

@@ -22,6 +22,9 @@ Authored SQL in [`migrations/`](./migrations), applied in lexical order by
 | `0000_platform_init.sql` | identity/tenancy/auth/audit tables, FKs, indexes |
 | `0001_platform_security.sql` | append-only `audit_log` trigger; RLS + `FORCE ROW LEVEL SECURITY` on `users` / memberships / `audit_log` |
 | `0002_platform_federation_support.sql` | federation (`org_connections`, `cross_org_links`), support (`break_glass_sessions`, `act_as_sessions`), instance config (`instance_settings`, `platform_config`); federation RLS (both-participant check). Support/instance tables are app-authorized, not under org-GUC RLS |
+| `0003_organization_lifecycle.sql` | org `status` column + lifecycle |
+| `0004_users_org_nullable.sql` | nullable home `organization_id` for org-less operators |
+| `0005_runtime_least_privilege.sql` | documents the runtime GRANT matrix (#152); grants themselves are applied by `@govcore/setup` `provisionRuntimeRole` |
 
 > Core **owns** this DDL (design §5). It must stay in sync with
 > [`src/schema.ts`](./src/schema.ts). A schema-conformance test is a follow-up.
@@ -31,6 +34,11 @@ Authored SQL in [`migrations/`](./migrations), applied in lexical order by
 - **`govcore-migrate`** runs as the **owner / DDL** role:
   set `GOVCORE_MIGRATE_DATABASE_URL` (falls back to `DATABASE_URL`).
 - The **app runtime** connects as a separate **non-owner** role, which RLS binds.
+- **Least-privilege grants** (`@govcore/setup` `provisionRuntimeRole`, #152): the
+  runtime role does **not** get blanket `ALL TABLES` DML. Auth.js adapter tables,
+  support/operator tables, and the migrate journal have **no** runtime grants
+  (use `authDb` / `operatorDb`). `organizations` is SELECT-only. Re-run
+  `provisionRuntimeRole` after upgrading.
 
 ## Tenant isolation (design §13.1)
 
