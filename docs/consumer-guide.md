@@ -54,9 +54,13 @@ That runs, in order (see [`@govcore/setup`](../packages/setup)):
 
 1. **`govcore-migrate`** — applies the platform migrations (tables, the
    append-only audit trigger, the RLS policies). Idempotent.
-2. **`provisionRuntimeRole`** — creates the non-owner runtime role and grants it
-   DML + *default* privileges on the schema (so tables created later, e.g. by the
-   content engine, are reachable without re-granting).
+2. **`provisionRuntimeRole`** — creates the non-owner runtime role and applies
+   the **least-privilege GRANT matrix** (#152): SELECT on `organizations`; full
+   DML on RLS-bound tenant/federation tables; SELECT/INSERT on `audit_log`;
+   **no** grants on Auth.js adapter tables, support/operator tables, or the
+   migrate journal. Non-`govcore` schemas (e.g. `content`) still get full DML +
+   *default* privileges so compiled tables stay reachable. **Re-run on upgrade**
+   — it REVOKEs any prior blanket `ALL TABLES` grants first.
 3. **`bootstrap`** — on an **empty** instance, creates the first organization and
    its instance-admin, in one audited transaction. **Refuses** if any org already
    exists, so it's safe to leave wired into a deploy step.
@@ -99,7 +103,10 @@ gets a system with no tenant isolation and no error.
 
 **Do:** run the app as the role `provisionRuntimeRole` created. Verify isolation
 early — with two orgs seeded, confirm a query under org A's context returns only
-A's rows and a query with *no* context returns **zero**.
+A's rows and a query with *no* context returns **zero**. Also confirm the
+runtime role **cannot** `DELETE`/`UPDATE` `organizations`, read
+`govcore.sessions` / `accounts`, or insert into `break_glass_sessions` — those
+are privileged-plane only (#152).
 
 ### 2. Login needs the privileged pool — `authDb`
 
@@ -124,8 +131,11 @@ easy to leave exposed.
 It's the mirror of `tenantAction`: privileged pool, **no** org GUC (cross-org by
 design), gated by `instanceRole` (default `instance_admin`), with an audit writer
 bound to the operator. Compose the operator mutations from `@govcore/tenancy`
-(`createOrganization`, `updateUserAdministration`, `suspendOrganization`, …) and
-`@govcore/auth` (`provisionUser`) inside it.
+(`createOrganization`, `updateUserAdministration`, `suspendOrganization`, …),
+`@govcore/auth` (`provisionUser`), and `@govcore/support` (break-glass / act-as)
+inside it. The runtime role has **no grants** on support or Auth.js tables
+(#152), so wiring those helpers to the tenant pool fails at the database — use
+`operatorDb` / `authDb` deliberately.
 
 ### 4. `govcore-migrate`, never `drizzle-kit push`
 
