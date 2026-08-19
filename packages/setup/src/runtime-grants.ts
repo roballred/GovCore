@@ -88,6 +88,9 @@ export function buildRuntimeGrantStatements(role: string): RuntimeGrantStatement
     `GRANT SELECT, INSERT ON ${audit} TO ${role}`,
     // Sequences are uncommon (uuid PKs), but keep USAGE for anything that appears.
     `GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA ${PLATFORM_SCHEMA} TO ${role}`,
+    // #153 — table-level UPDATE still includes instance_role; strip that column.
+    // The migrate trigger is the binding guard; this is defense in depth.
+    `REVOKE UPDATE (instance_role) ON ${PLATFORM_SCHEMA}.users FROM ${role}`,
   ]
 
   const otherSchema = (schema: string): string[] => [

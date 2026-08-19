@@ -59,6 +59,10 @@ describe('buildRuntimeGrantStatements (#152)', () => {
     }
   })
 
+  it('revokes UPDATE on users.instance_role (#153)', () => {
+    expect(all).toMatch(/REVOKE UPDATE \(instance_role\) ON govcore\.users FROM/)
+  })
+
   it('keeps full DML + default privileges for non-platform schemas (content)', () => {
     const content = otherSchema('content').join('\n')
     expect(content).toContain('GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA content')
