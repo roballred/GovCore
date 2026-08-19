@@ -51,28 +51,78 @@ export async function provisionRuntimeRole(opts: ProvisionRuntimeRoleOptions): P
   const schemas = opts.schemas ?? ['govcore']
   schemas.forEach((s) => assertSafeIdentifier(s, 'schema'))
   const log = opts.log ?? (() => {})
-  const escapedPassword = opts.password.replace(/'/g, "''")
 
   const sql = postgres(opts.connectionString, { max: 1 })
   try {
-    await sql.unsafe(
-      `DO $$ BEGIN CREATE ROLE ${opts.role} LOGIN PASSWORD '${escapedPassword}';
-       EXCEPTION WHEN duplicate_object THEN NULL; END $$;`,
-    )
-    for (const schema of schemas) {
-      await sql.unsafe(`GRANT USAGE ON SCHEMA ${schema} TO ${opts.role}`)
-      await sql.unsafe(`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA ${schema} TO ${opts.role}`)
-      await sql.unsafe(`GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA ${schema} TO ${opts.role}`)
-      await sql.unsafe(
-        `ALTER DEFAULT PRIVILEGES IN SCHEMA ${schema} GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ${opts.role}`,
-      )
-      await sql.unsafe(
-        `ALTER DEFAULT PRIVILEGES IN SCHEMA ${schema} GRANT USAGE, SELECT ON SEQUENCES TO ${opts.role}`,
-      )
-      log(`govcore-setup: granted ${opts.role} on schema ${schema}`)
-    }
+    await runRoleProvisioning(sql as unknown as ProvisionSql, {
+      role: opts.role,
+      password: opts.password,
+      schemas,
+      log,
+    })
   } finally {
     await sql.end()
+  }
+}
+
+// Session GUC the password is stashed in (as a bound parameter) so it is never
+// interpolated into DDL text. Custom GUCs must be dot-qualified.
+const PROVISION_PW_GUC = 'govcore.provision_password'
+
+/**
+ * The role-creation DDL — **password-free by construction** (#157). The password
+ * is delivered separately as a bound parameter and read back here via
+ * `current_setting`, then quoted by Postgres' own `format(%L)`. Because the value
+ * never appears in this SQL text, a password containing `$$`, `'`, or `\` cannot
+ * break out of the dollar-quoted block or inject DDL as the owner. `role` is a
+ * validated identifier (letters/digits/underscore), embedded via `%I`. A named
+ * dollar-tag (`$govcore_provision$`) is used so the block can't be terminated by
+ * a stray `$$` either.
+ */
+function buildCreateRoleDoBlock(role: string): string {
+  assertSafeIdentifier(role, 'role')
+  return `DO $govcore_provision$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${role}') THEN
+    EXECUTE format('CREATE ROLE %I LOGIN PASSWORD %L', '${role}', current_setting('${PROVISION_PW_GUC}'));
+  END IF;
+END $govcore_provision$;`
+}
+
+/** Minimal structural shape of the postgres.js client the DB half needs. */
+export interface ProvisionSql {
+  (parts: TemplateStringsArray, ...values: unknown[]): Promise<unknown>
+  unsafe(query: string): Promise<unknown>
+}
+
+/**
+ * @internal Exported for unit tests. The DB-facing half of `provisionRuntimeRole`,
+ * split out so the injection-safety of role creation can be asserted without a
+ * live Postgres (see index.test.ts). The password reaches Postgres only through
+ * the bound `set_config` parameter — never through `sql.unsafe` text.
+ */
+export async function runRoleProvisioning(
+  sql: ProvisionSql,
+  opts: { role: string; password: string; schemas: string[]; log: (message: string) => void },
+): Promise<void> {
+  await sql`SELECT set_config(${PROVISION_PW_GUC}, ${opts.password}, false)`
+  try {
+    await sql.unsafe(buildCreateRoleDoBlock(opts.role))
+  } finally {
+    // Don't leave the plaintext password lingering in session state.
+    await sql`SELECT set_config(${PROVISION_PW_GUC}, ${''}, false)`
+  }
+  for (const schema of opts.schemas) {
+    await sql.unsafe(`GRANT USAGE ON SCHEMA ${schema} TO ${opts.role}`)
+    await sql.unsafe(`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA ${schema} TO ${opts.role}`)
+    await sql.unsafe(`GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA ${schema} TO ${opts.role}`)
+    await sql.unsafe(
+      `ALTER DEFAULT PRIVILEGES IN SCHEMA ${schema} GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ${opts.role}`,
+    )
+    await sql.unsafe(
+      `ALTER DEFAULT PRIVILEGES IN SCHEMA ${schema} GRANT USAGE, SELECT ON SEQUENCES TO ${opts.role}`,
+    )
+    opts.log(`govcore-setup: granted ${opts.role} on schema ${schema}`)
   }
 }
 

@@ -467,6 +467,36 @@ async function main() {
   // @govcore/setup (#68) — the RLS assertions below then validate those grants.
   await provisionRuntimeRole({ connectionString: smokeUrl, role: APP_ROLE, password: APP_PW })
 
+  // 8-#157. provisionRuntimeRole must not let a password break out of the
+  // dollar-quoted role-creation block. Provision a throwaway role whose password
+  // contains `$$` (would have closed the old `DO $$ … $$`), a single quote, a
+  // backslash, and a `$do$` tag, then prove the role is created and authenticates
+  // with that exact password. (URL creds are percent-encoded by withCreds.)
+  const INJ_ROLE = 'govcore_smoke_inj'
+  const INJ_PW = "a$$b'c\\d$do$e"
+  let injProvisioned = false
+  try {
+    await provisionRuntimeRole({ connectionString: smokeUrl, role: INJ_ROLE, password: INJ_PW })
+    injProvisioned = true
+  } catch (err) {
+    console.error(`  ✗ #157 provision threw: ${(err as Error).message}`)
+  }
+  check('#157: provisionRuntimeRole survives $$/quote/backslash password', injProvisioned)
+
+  let injLoginOk = false
+  try {
+    const probe = postgres(withCreds(smokeUrl, INJ_ROLE, INJ_PW), { max: 1 })
+    try {
+      await probe`SELECT 1`
+      injLoginOk = true
+    } finally {
+      await probe.end()
+    }
+  } catch {
+    injLoginOk = false
+  }
+  check('#157: role authenticates with the exact hostile password (no truncation/injection)', injLoginOk)
+
   const app = createTestDb(withCreds(smokeUrl, APP_ROLE, APP_PW))
   const aRows = await withTenant(app.db, orgA.id, (tx) => tx.select().from(users))
   const bRows = await withTenant(app.db, orgB.id, (tx) => tx.select().from(users))
