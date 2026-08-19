@@ -1,5 +1,16 @@
 # @govcore/setup
 
+## 0.2.1
+
+### Patch Changes
+
+- 43f4a76: Protect `users.instance_role` from runtime escalation (#153): migration `0006` adds a BEFORE INSERT/UPDATE trigger that allows changes only from the privilege plane (superuser, BYPASSRLS/`authDb`, or table owner). `provisionRuntimeRole` also `REVOKE UPDATE (instance_role)` as defense in depth. Smoke asserts runtime denial and privilege-plane allow.
+- Updated dependencies [43f4a76]
+  - @govcore/schema@0.5.0
+  - @govcore/audit@0.2.2
+  - @govcore/auth@0.9.2
+  - @govcore/tenancy@0.5.2
+
 ## 0.2.0
 
 ### Minor Changes
