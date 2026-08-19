@@ -43,6 +43,9 @@ export interface ProvisionRuntimeRoleOptions {
  * the role the app connects as — it must NOT be a superuser, so RLS binds it
  * (see @govcore/auth's `authDb` for why login still needs a separate pool).
  *
+ * On `govcore.users`, UPDATE on `instance_role` is revoked (#153) — operator
+ * elevation is privilege-plane only (also enforced by a migrate trigger).
+ *
  * Content-engine consumers pass `schemas: ['govcore', 'content']` once the
  * `content` schema exists.
  */
@@ -69,6 +72,12 @@ export async function provisionRuntimeRole(opts: ProvisionRuntimeRoleOptions): P
       await sql.unsafe(
         `ALTER DEFAULT PRIVILEGES IN SCHEMA ${schema} GRANT USAGE, SELECT ON SEQUENCES TO ${opts.role}`,
       )
+      // #153 — even with table-level UPDATE, the runtime must not be able to
+      // stamp instance_role (operator plane). The migrate trigger is the binding
+      // guard; this column REVOKE is defense in depth for the govcore schema.
+      if (schema === 'govcore') {
+        await sql.unsafe(`REVOKE UPDATE (instance_role) ON govcore.users FROM ${opts.role}`)
+      }
       log(`govcore-setup: granted ${opts.role} on schema ${schema}`)
     }
   } finally {

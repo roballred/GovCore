@@ -9,7 +9,7 @@
 
 import { randomUUID } from 'node:crypto'
 import postgres from 'postgres'
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import { migrate } from '@govcore/schema/migrate'
 import { organizations, users, userOrganizationMemberships } from '@govcore/schema'
 import { createRbac } from '@govcore/rbac'
@@ -482,11 +482,46 @@ async function main() {
   // binds even the owner, so owner alone is not enough).
   const loginOnRuntime = (await app.db.select().from(users).where(eq(users.email, userA.email))).length
   check('login wall: runtime pool finds 0 users by email (no GUC) — the #57 failure', loginOnRuntime === 0, `(${loginOnRuntime})`)
+
+  // 8c. instance_role is privilege-plane only (#153): a tenant UPDATE must not
+  // escalate to instance_admin (JWT refresh would then unlock operatorAction).
+  console.log('• privilege plane: instance_role guard (#153)')
+  let instanceRoleDenied = false
+  try {
+    await withTenant(app.db, orgA.id, (tx) =>
+      tx.execute(sql`UPDATE govcore.users SET instance_role = 'instance_admin' WHERE id = ${userA.id}`),
+    )
+  } catch {
+    instanceRoleDenied = true
+  }
+  check('#153: runtime cannot UPDATE users.instance_role', instanceRoleDenied)
+
+  let instanceRoleInsertDenied = false
+  try {
+    await withTenant(app.db, orgA.id, (tx) =>
+      tx.execute(sql`
+        INSERT INTO govcore.users (organization_id, email, instance_role)
+        VALUES (${orgA.id}, ${`escalated-${Date.now()}@example.test`}, 'instance_admin')
+      `),
+    )
+  } catch {
+    instanceRoleInsertDenied = true
+  }
+  check('#153: runtime cannot INSERT users with instance_role set', instanceRoleInsertDenied)
+
   await app.close()
 
   const authPlane = createTestDb(smokeUrl) // DATABASE_URL superuser — bypasses FORCE RLS, like authDb
   const loginOnAuthDb = (await authPlane.db.select().from(users).where(eq(users.email, userA.email))).length
   check('login wall fix: authDb pool finds the user by email pre-session', loginOnAuthDb === 1, `(${loginOnAuthDb})`)
+
+  // Privilege plane can still grant instance_admin (trigger allows superuser/BYPASSRLS).
+  await authPlane.client.unsafe(
+    `UPDATE govcore.users SET instance_role = 'instance_admin' WHERE id = '${userB.id}'`,
+  )
+  const [elevated] = await authPlane.db.select().from(users).where(eq(users.id, userB.id)).limit(1)
+  check('#153: privilege plane CAN set instance_role', elevated?.instanceRole === 'instance_admin')
+  await authPlane.client.unsafe(`UPDATE govcore.users SET instance_role = NULL WHERE id = '${userB.id}'`)
   await authPlane.close()
 
   // 9. support: break-glass + act-as lifecycle (instance-level; not RLS-bound)

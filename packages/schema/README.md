@@ -22,6 +22,9 @@ Authored SQL in [`migrations/`](./migrations), applied in lexical order by
 | `0000_platform_init.sql` | identity/tenancy/auth/audit tables, FKs, indexes |
 | `0001_platform_security.sql` | append-only `audit_log` trigger; RLS + `FORCE ROW LEVEL SECURITY` on `users` / memberships / `audit_log` |
 | `0002_platform_federation_support.sql` | federation (`org_connections`, `cross_org_links`), support (`break_glass_sessions`, `act_as_sessions`), instance config (`instance_settings`, `platform_config`); federation RLS (both-participant check). Support/instance tables are app-authorized, not under org-GUC RLS |
+| `0003_organization_lifecycle.sql` | org `status` column + lifecycle |
+| `0004_users_org_nullable.sql` | nullable home `organization_id` for org-less operators |
+| `0005_protect_instance_role.sql` | trigger: `users.instance_role` writable only from privilege plane (superuser / BYPASSRLS / table owner) — blocks runtime escalation (#153) |
 
 > Core **owns** this DDL (design §5). It must stay in sync with
 > [`src/schema.ts`](./src/schema.ts). A schema-conformance test is a follow-up.
