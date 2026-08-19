@@ -1,5 +1,22 @@
 # @govcore/example-smoke
 
+## 0.0.26
+
+### Patch Changes
+
+- Updated dependencies [30ad149]
+  - @govcore/setup@0.2.0
+  - @govcore/schema@0.4.1
+  - @govcore/audit@0.2.1
+  - @govcore/auth@0.9.1
+  - @govcore/backup@0.2.5
+  - @govcore/content@0.5.8
+  - @govcore/federation@0.2.6
+  - @govcore/server@0.3.3
+  - @govcore/support@0.2.5
+  - @govcore/tenancy@0.5.1
+  - @govcore/testing@0.1.5
+
 ## 0.0.25
 
 ### Patch Changes
